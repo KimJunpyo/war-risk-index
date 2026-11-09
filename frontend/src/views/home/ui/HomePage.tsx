@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Opponents, StatusBadge, useCountries, type Advisory, type Country } from "@/entities/country";
-import { ActionGuide } from "@/entities/guide";
+import { ActionGuide, FAQ } from "@/entities/guide";
 import { LiveBadge } from "@/entities/live";
 import { GradeBadge, usePairs, type Pair } from "@/entities/pair";
 import { useBlendWeights } from "@/entities/risk-index";
@@ -141,6 +141,18 @@ export function HomePage() {
           </div>
         </section>
       )}
+
+      <section className="mt-10" aria-labelledby="faq-title">
+        <h2 id="faq-title" className="mb-3 text-sm font-semibold tracking-wide text-neutral-300">자주 묻는 질문</h2>
+        <div className="divide-y divide-white/5 rounded-xl border border-white/10">
+          {FAQ.map(({ q, a }) => (
+            <details key={q} className="group px-4 py-3">
+              <summary className="cursor-pointer select-none text-sm text-neutral-200">{q}</summary>
+              <p className="mt-2 text-xs leading-relaxed text-neutral-400">{a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
 
       <footer className="mt-10 text-xs leading-relaxed text-neutral-600">
         데이터: GDELT 일별 파일(일별 뉴스 집계·과거 추이), GDELT 15분 파일(15분 뉴스 집계·실시간 24시간),

@@ -22,7 +22,8 @@ const ZOOM_STEP = 1.6;
 const FLY_MS = 700;
 const FLY_MAX_ZOOM = 5;
 const FLY_FILL = 0.6; // 날아간 뒤 나라가 화면에서 차지하는 비율
-const LABEL_MIN_ZOOM = 2; // 이 배율부터 주목 국가 이름 표시
+const LABEL_FONT = 10;
+const LABEL_CHAR_W = 9; // 한글 한 글자 폭(지도 좌표). 나라 폭에 이름이 들어가면 표시 → 확대할수록 작은 나라도 나타남
 const POINTER_R = { "전쟁 중": 4.5, "내전 중": 4, "무력 충돌": 3.5, "휴전·소강": 3, "잦은 국방 이슈": 3 } as const;
 const TOOLTIP_W = 220;
 // 나라 면에 빗금을 덧씌우는 상태 → SVG 패턴 id
@@ -48,6 +49,11 @@ const METRICS: { value: Metric; label: string }[] = [
   { value: "blended", label: "종합" },
   { value: "live", label: "실시간 24시간" },
 ];
+// 지도 색·주목 국가 점수·정렬이 모두 이 기준을 따름
+const METRIC_SCORE: Record<Metric, (c: Country) => number | null | undefined> = {
+  blended: (c) => c.latest.blended ?? c.latest.weekly,
+  live: (c) => c.live?.score,
+};
 
 // 지도 도형은 모듈 로드 시 한 번만 투영 (50m 해상도, 241개 지역)
 const topo = world as unknown as Topology<{ countries: GeometryCollection<{ name: string }> }>;
@@ -78,6 +84,10 @@ const SHAPES = feature(topo, topo.objects.countries).features.map((f, i) => {
 });
 // 같은 코드가 여럿이면 가장 큰 땅(본토)을 대표로: 면적 오름차순으로 넣어 큰 것이 덮어씀
 const SHAPE_BY_ID = new Map(SHAPES.filter((s) => s.id).sort((a, b) => a.area - b.area).map((s) => [s.id, s]));
+// 이름표: 나라마다 하나(본토 기준), 나라 폭과 이름 길이를 미리 계산
+const LABELS = [...SHAPE_BY_ID.values()].filter((s) => s.center).map((s) => ({
+  ...s, width: s.bounds[1][0] - s.bounds[0][0], textW: s.name.length * LABEL_CHAR_W,
+}));
 const SPHERE = toPath({ type: "Sphere" }) ?? "";
 const GRATICULE = toPath(geoGraticule10()) ?? "";
 
@@ -109,7 +119,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const byNumeric = useMemo(() => new Map(countries.map((c) => [c.numeric, c])), [countries]);
-  const watch = useMemo(() => watchList(countries), [countries]);
+  const watch = useMemo(() => watchList(countries, METRIC_SCORE[metric]), [countries, metric]);
   const flagged = useMemo(() => countries.filter((c) => c.status && SHAPE_BY_ID.get(c.numeric)?.center), [countries]);
 
   useEffect(() => {
@@ -164,7 +174,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
   // 나라 면은 확대·호버와 무관 → 메모해서 이동 중 다시 그리지 않음
   const land = useMemo(() => SHAPES.map((s) => {
     const c = byNumeric.get(s.id);
-    const v = metric === "live" ? c?.live?.score : c?.latest.blended ?? c?.latest.weekly;
+    const v = c && METRIC_SCORE[metric](c);
     return (
       <g key={s.key}>
         <path
@@ -246,13 +256,21 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                     <circle r={POINTER_R[status]} fill={hex} className="animate-ping-slow"
                       style={{ transformBox: "fill-box", transformOrigin: "center" }} />
                     <circle r={POINTER_R[status]} fill={hex} stroke="#05080e" strokeWidth={1.2} filter="url(#glow)" />
-                    {t.k >= LABEL_MIN_ZOOM && (
-                      <text y={-POINTER_R[status] - 4} textAnchor="middle" fontSize={11} fill="#e5e7eb"
-                        stroke="#05080e" strokeWidth={3} paintOrder="stroke" className="font-medium">
-                        {countryName(c.iso2, c.code)}
-                      </text>
-                    )}
                   </g>
+                );
+              })}
+              {LABELS.map((s) => {
+                const c = byNumeric.get(s.id);
+                // 화면에서 나라 폭이 이름보다 넓을 때만 (선택한 나라는 항상)
+                if (s !== selShape && s.width * t.k < s.textW) return null;
+                const r = c?.status ? POINTER_R[c.status] + 4 : 0; // 포인터가 있으면 그 위에
+                return (
+                  <text key={s.key} transform={`translate(${s.center![0]},${s.center![1]}) scale(${1 / t.k})`}
+                    y={r ? -r : LABEL_FONT / 3} textAnchor="middle" fontSize={LABEL_FONT}
+                    fill={c ? "#e5e7eb" : "#6b7280"} stroke="#05080e" strokeWidth={3} paintOrder="stroke"
+                    className="pointer-events-none font-medium">
+                    {s.name}
+                  </text>
                 );
               })}
             </g>
@@ -312,7 +330,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                 >
                   <div className="flex items-center gap-2 text-sm">
                     <span className="truncate text-neutral-200">{countryName(c.iso2, c.code)}</span>
-                    <span className="ml-auto tabular-nums text-neutral-300">{formatScore(c.latest.blended ?? c.latest.weekly)}</span>
+                    <span className="ml-auto tabular-nums text-neutral-300">{formatScore(METRIC_SCORE[metric](c))}</span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap gap-1">
                     {reasons.map((r) => (
