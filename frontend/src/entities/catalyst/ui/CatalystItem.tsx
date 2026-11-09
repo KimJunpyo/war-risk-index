@@ -32,7 +32,7 @@ export function CatalystItem({ event }: { event: CatalystEvent }) {
           </>
         )}
       </span>
-      <span className="ml-auto shrink-0 text-xs text-neutral-500">언급 {event.mentions}</span>
+      <span className="ml-auto shrink-0 text-xs text-neutral-500">보도 {event.mentions}건</span>
     </li>
   );
 }
