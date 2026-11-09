@@ -7,7 +7,7 @@ import { LiveBadge } from "@/entities/live";
 import { GradeBadge, usePairs, type Pair } from "@/entities/pair";
 import { useBlendWeights } from "@/entities/risk-index";
 import { PairTabs } from "@/features/select-pair";
-import { countryName, formatScore, GRADE_STYLE, type Grade, type LiveScore } from "@/shared/lib";
+import { countryName, formatScore, GRADE_STYLE, newsKeywords, type Grade, type LiveScore } from "@/shared/lib";
 import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { GuideModal } from "@/widgets/guide-modal";
@@ -25,6 +25,7 @@ interface Summary {
   title: string;
   basePath: string;
   newsPath: string;
+  newsKeywords: string[]; // 뉴스 제목 필터 키워드
   blended: number | null | undefined; // 종합
   daily7: number | null | undefined; // 일별 뉴스 집계(GDELT 1.0) 7일
   min15: number | null | undefined; // 15분 뉴스 집계(GDELT 2.0) 7일
@@ -134,7 +135,7 @@ export function HomePage() {
           </div>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <RiskHistory basePath={summary.basePath} />
-            <NewsFeed newsPath={summary.newsPath} />
+            <NewsFeed newsPath={summary.newsPath} keywords={summary.newsKeywords} />
             {/* 패널이 3개라 2열 그리드 마지막 칸이 비지 않도록 두 열을 모두 차지 */}
             <div className="lg:col-span-2">
               <CatalystPanel basePath={summary.basePath} />
@@ -178,7 +179,7 @@ function summarize(target: Target, pairs: Pair[], countries: Country[]): Summary
     const name = countryName(c.iso2, c.code);
     const basePath = `/api/countries/${c.code}`;
     return {
-      title: name, basePath, newsPath: `${basePath}/news?name=${encodeURIComponent(name)}`,
+      title: name, basePath, newsPath: `${basePath}/news?name=${encodeURIComponent(name)}`, newsKeywords: newsKeywords(c.iso2),
       blended: c.latest.blended, daily7: c.latest.weekly, min15: c.latest.v2_weekly, reason: c.status_reason,
       grade: c.latest.grade, live: c.live, status: c.status, date: c.latest.date, advisory: c.advisory ?? [], country: c,
     };
@@ -186,8 +187,13 @@ function summarize(target: Target, pairs: Pair[], countries: Country[]): Summary
   const p = pairs.find((x) => x.id === target.id);
   if (!p) return null;
   const basePath = `/api/pairs/${p.id}`;
+  // 쌍 id(KOR-PRK)의 각 코드를 국가 목록에서 찾아 두 나라 키워드 합집합 (목록에 없는 나라는 p.countries 한국어 이름만)
+  const keywords = p.id.split("-").flatMap((code) => {
+    const c = countries.find((x) => x.code === code);
+    return c ? newsKeywords(c.iso2) : [];
+  });
   return {
-    title: p.name, basePath, newsPath: `${basePath}/news`,
+    title: p.name, basePath, newsPath: `${basePath}/news`, newsKeywords: [...new Set([...keywords, ...p.countries])],
     blended: p.latest?.blended, daily7: p.latest?.weekly, min15: p.latest?.v2_weekly, reason: null,
     grade: p.latest?.grade, live: p.live, status: null, date: p.latest?.date, advisory: [], country: null,
   };
