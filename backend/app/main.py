@@ -6,9 +6,11 @@
 """
 
 import logging
+import math
 import os
 import threading
 import time
+import urllib.parse
 import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -27,6 +29,7 @@ import data_go_kr
 import gdelt_collect
 import index_v1
 import live
+import shelters
 import travel_advisory
 import ucdp
 from backend.app.news import RANGES, fetch_news
@@ -48,6 +51,14 @@ LIVE_UPDATES = os.getenv("LIVE_UPDATES", "1") == "1"
 LIVE_INTERVAL_SECONDS = live.SLOT_MINUTES * 60
 COLLECTOR_IDLE_SECONDS = 600  # 이 시간 안에 수집 파일이 바뀌었으면 수동 수집 중으로 보고 일별 갱신을 미룸
 COUNTRY_NEWS_QUERY = "{name} (군사 OR 국방 OR 분쟁 OR 공격 OR 미사일)"
+# 대피소 조회: 좌표는 소수점 2자리(약 1km)까지만 받음(정밀 위치를 받지 않도록)
+COORD_PATTERN = r"^-?\d{1,3}(\.\d{1,2})?$"
+KOREA_LAT, KOREA_LON = (33.0, 39.0), (124.0, 132.0)
+SHELTER_RADIUS_M = 5000
+SHELTER_NEARBY_LIMIT = 10
+SHELTER_REGION_LIMIT = 50
+METERS_PER_DEG_LAT = 111_000  # 반경 사전 필터용 근사
+SHELTER_FIELDS = ["name", "address", "lat", "lon", "distance_m", "capacity", "kind"]
 # 지수 표의 공통 열 (v1 7일, v2 7일, 종합, 24시간, 등급)
 INDEX_COLUMNS = ["date", "daily", "weekly", "v2_weekly", "blended", "grade"]
 
@@ -69,6 +80,20 @@ CASE_LABELS = {
 log = logging.getLogger("war-risk")
 if not os.getenv(DATA_GO_KR_SERVICE_KEY):
     log.warning("%s 가 없어 공공데이터 API 기능은 꺼진 상태로 기동함", DATA_GO_KR_SERVICE_KEY)
+
+
+class _NoShelterQueryLog(logging.Filter):
+    """uvicorn 접근 로그에 대피소 조회 요청(좌표 쿼리)을 남기지 않는다."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args if isinstance(record.args, tuple) else ()
+        if len(args) <= 2:
+            return True
+        path = urllib.parse.unquote(str(args[2]))  # args[2] = 경로+쿼리. 퍼센트 인코딩·끝 슬래시(307) 우회 방지
+        return not ("/api/shelters" in path and "?" in path)
+
+
+logging.getLogger("uvicorn.access").addFilter(_NoShelterQueryLog())
 _cache: dict[tuple[Path, str], tuple[float, pd.DataFrame]] = {}
 _live_cache: dict[tuple, pd.DataFrame] = {}
 
@@ -130,6 +155,10 @@ def _daily_refresh() -> None:
         travel_advisory.update()  # 파일 mtime 으로 하루 1회만 실제 수신
     except Exception:  # 여행경보 실패가 지수 갱신을 막지 않도록
         log.exception("여행경보 갱신 실패")
+    try:
+        shelters.update()  # 파일 mtime 으로 하루 1회만 실제 수신
+    except Exception:
+        log.exception("대피시설 갱신 실패")
     yesterday = pd.Timestamp.utcnow().tz_localize(None).normalize() - pd.Timedelta(days=1)
     if _recently_written(ROOT / country_collect.COUNTRY_FILE, ROOT / live.V2_DAILY_COUNTRY):
         return
@@ -378,6 +407,64 @@ def live_status() -> dict:
         return {"as_of": None, "slots": 0}
     end = slots["key"].max()
     return {"as_of": end, "slots": int(live.window(slots, end)[1])}
+
+
+# ---------- 민방위 대피시설 (국내) ----------
+
+def _shelters() -> pd.DataFrame:
+    """키가 없거나 파일이 없으면 빈 표."""
+    if not data_go_kr.service_key():
+        return pd.DataFrame()
+    return _csv(ROOT / shelters.SHELTER_FILE, dtype={"mng_no": str, "capacity": "Int64"},
+                keep_default_na=False, na_values=[""])
+
+
+def _shelter_items(df: pd.DataFrame) -> list[dict]:
+    return [{**r, "capacity": None if r["capacity"] is None else int(r["capacity"])}
+            for r in _records(df[SHELTER_FIELDS])]
+
+
+@app.get("/api/shelters")
+def list_shelters(lat: str | None = Query(None, pattern=COORD_PATTERN),
+                  lon: str | None = Query(None, pattern=COORD_PATTERN),
+                  region: str | None = Query(None, min_length=2, max_length=40)) -> dict:
+    """좌표(소수 2자리까지) 기준 5km 안 가까운 10곳, 또는 region="시·도[ 시·군·구]" 의 최대 50곳.
+    요청 좌표는 로그·파일에 남기지 않는다."""
+    if (lat is None or lon is None) and not region:
+        raise HTTPException(422, "lat·lon 또는 region 이 필요함")
+    df = _shelters()
+    out = {"available": not df.empty, "as_of": df["updated"].max() if len(df) else None, "items": []}
+    if df.empty:
+        return out
+    if lat is not None and lon is not None:
+        y, x = float(lat), float(lon)
+        if not (KOREA_LAT[0] <= y <= KOREA_LAT[1] and KOREA_LON[0] <= x <= KOREA_LON[1]):
+            return out
+        dy = SHELTER_RADIUS_M / METERS_PER_DEG_LAT
+        dx = dy / math.cos(math.radians(y))
+        near = df[df["lat"].between(y - dy, y + dy) & df["lon"].between(x - dx, x + dx)].copy()
+        near["distance_m"] = [round(shelters.haversine_m(y, x, a, b)) for a, b in zip(near["lat"], near["lon"])]
+        near = near[near["distance_m"] <= SHELTER_RADIUS_M].sort_values("distance_m").head(SHELTER_NEARBY_LIMIT)
+        out["items"] = _shelter_items(near)
+        return out
+    sido, _, sigungu = region.strip().partition(" ")
+    rows = df[df["sido"] == sido]
+    if sigungu.strip():
+        rows = rows[rows["sigungu"] == sigungu.strip()]
+    out["items"] = _shelter_items(rows.sort_values("name").head(SHELTER_REGION_LIMIT).assign(distance_m=None))
+    return out
+
+
+@app.get("/api/shelters/regions")
+def shelter_regions() -> dict:
+    """시·도 → 시·군·구 목록 (위치 권한 없는 사용자의 지역 선택용)."""
+    df = _shelters()
+    if df.empty:
+        return {"available": False, "regions": []}
+    present = set(df["sido"].dropna())
+    return {"available": True, "regions": [
+        {"sido": s, "sigungu": sorted(set(df.loc[df["sido"] == s, "sigungu"].dropna()))}
+        for s in shelters.SIDO if s in present]}
 
 
 assert set(RANGES) == {"24h", "7d"}  # news 쿼리 패턴과 동기화

@@ -38,7 +38,8 @@
 - update(force: bool = False) -> bool
     키 없음 → False, 호출·파일 쓰기 없음. 실패 → 예외 전파, 기존 파일 그대로(임시 파일 후 교체).
     저장 행 = RMV_YMD 비었고 OPER_STTS == "사용중" 이고 LAT_EPSG4326·LOT_EPST4326(원문 오타) 가 있는 시설, 1행 1시설.
-    주소 = ROAD_NM_WHOL_ADDR, 비었으면 LCTN_WHOL_ADDR. 시·도는 현행 17개 이름으로 정규화(강원도 → 강원특별자치도 등).
+    주소 = ROAD_NM_WHOL_ADDR, 비었으면 LCTN_WHOL_ADDR. 시·도는 옛 명칭만 현행 이름으로 정규화(강원도 → 강원특별자치도 등)하고
+    그 밖에는 원천 표기를 따른다. 허용 목록 = 기존 17개 + "전남광주통합특별시"(2026-11-09 원천이 광주·전남 대부분을 이 이름으로 표기).
     시·군·구 = 주소 두 번째 낱말이 시·군·구로 끝날 때만, 아니면 없음(세종).
 - GET /api/shelters?lat=&lon=  → {"available": bool, "as_of": "YYYY-MM-DD" | null, "items": [...]}
     소수점 3자리 이상이면 422. 위도 33~39·경도 124~132 밖이면 items []. 반경 5000m, 가까운 순 최대 10곳.
@@ -89,6 +90,8 @@ SIDO_17 = {
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시",
     "경기도", "강원특별자치도", "충청북도", "충청남도", "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도",
 }
+# 원천(2026-11-09 수집 18,846건)이 광주 5개 구·전남 대부분을 이 이름으로 표기(담양군 19건만 "전라남도"). 원천 표기를 따름
+SIDO_ALLOWED = SIDO_17 | {"전남광주통합특별시"}
 CALL_CENTER_TEL = "02-3210-0404"
 CALL_CENTER_TEL_OVERSEAS = "+82-2-3210-0404"
 SHELTER_FIELDS = {"name", "address", "lat", "lon", "distance_m", "capacity", "kind"}
@@ -489,7 +492,7 @@ def test_regions(client, shelter_data) -> None:
     body = client.get("/api/shelters/regions").json()
     assert body["available"] is True
     regions = {r["sido"]: r["sigungu"] for r in body["regions"]}
-    assert set(regions) <= SIDO_17
+    assert set(regions) <= SIDO_ALLOWED
     assert set(regions) == {"서울특별시", "강원특별자치도", "세종특별자치시"}  # 강원도 → 강원특별자치도
     assert sorted(regions["서울특별시"]) == ["송파구", "용산구", "종로구", "중구"]  # 철거·중지 시설만 있는 구 없음
     assert sorted(regions["강원특별자치도"]) == ["원주시", "춘천시"]
@@ -521,7 +524,9 @@ def test_request_coords_not_logged(client, shelter_data, caplog) -> None:
     with caplog.at_level(logging.DEBUG):
         client.get("/api/shelters", params={"lat": "37.57", "lon": "126.98"})
         client.get("/api/shelters", params={"lat": "37.5665", "lon": "126.98"})  # 422 경로도
-    leaked = [r.getMessage() for r in caplog.records if "37.57" in r.getMessage() or "126.98" in r.getMessage()]
+    # TestClient 쪽 httpx·httpcore 로그(HTTP Request: GET ...?lat=)는 클라이언트 기록이라 제외, 서버·앱(uvicorn.access 포함)만 판정
+    server = [r for r in caplog.records if not r.name.startswith(("httpx", "httpcore"))]
+    leaked = [r.getMessage() for r in server if "37.57" in r.getMessage() or "126.98" in r.getMessage()]
     assert leaked == []
     for f in (ROOT / "shelters.py", ROOT / "backend" / "app" / "main.py"):
         calls = re.findall(r"log\.\w+\([^\n]*", f.read_text(encoding="utf-8"))
