@@ -4,8 +4,11 @@ import type { Grade, LiveScore } from "@/shared/lib";
 export type CountryStatus = "전쟁 중" | "내전 중" | "무력 충돌" | "휴전·소강" | "잦은 국방 이슈";
 
 /** 백엔드 travel_advisory.by_iso3 와 일치. 영국 FCDO 단계는 alert_status 를 1~4로 자체 환산한 값 */
+/** 외교부 일부 지역 경보의 summary 머리말 (백엔드 travel_advisory.MOFA_PARTIAL 과 일치) */
+export const MOFA_PARTIAL = "일부 지역";
+
 export interface Advisory {
-  source: "us_state" | "uk_fcdo";
+  source: "kr_mofa" | "us_state" | "uk_fcdo";
   name: string; // 출처 표시명 (예: 미 국무부)
   level: number;
   max_level: number;

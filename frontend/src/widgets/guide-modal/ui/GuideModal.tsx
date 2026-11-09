@@ -69,12 +69,13 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-neutral-500">
-                <tr><th className="py-1 pr-3">단계</th><th className="py-1 pr-3">미 국무부</th><th className="py-1 pr-3">영국 FCDO (자체 환산)</th><th className="py-1">의미</th></tr>
+                <tr><th className="py-1 pr-3">단계</th><th className="py-1 pr-3">외교부</th><th className="py-1 pr-3">미 국무부</th><th className="py-1 pr-3">영국 FCDO (자체 환산)</th><th className="py-1">의미</th></tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-neutral-300">
                 {ADVISORY_LEVELS.map((l) => (
                   <tr key={l.level}>
                     <td className={`py-1.5 pr-3 font-semibold ${l.level === 4 ? "text-rose-300" : ""}`}>{l.level}단계</td>
+                    <td className="py-1.5 pr-3">{l.kr}</td>
                     <td className="py-1.5 pr-3">{l.us}</td>
                     <td className="py-1.5 pr-3">{l.uk}</td>
                     <td className="py-1.5 text-neutral-400">{l.meaning}</td>
@@ -84,7 +85,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
             </table>
           </div>
           <p className="mt-2 text-xs text-neutral-500">
-            영국 FCDO는 공식 숫자 단계가 없어 권고 범위(일부 지역·전역, 필수 외·모든 여행)를 1~4로 환산했습니다. 여행경보는 점수에 반영하지 않습니다.
+            영국 FCDO는 공식 숫자 단계가 없어 권고 범위(일부 지역·전역, 필수 외·모든 여행)를 1~4로 환산했습니다. 외교부 특별여행주의보는 이 표에 없습니다. 여행경보는 점수에 반영하지 않습니다.
           </p>
         </section>
 

@@ -23,6 +23,7 @@ import build_country_index
 import build_index
 import case_backtest  # CASES 만 사용. main() 은 __main__ 가드 안이라 import 부작용 없음
 import country_collect
+import data_go_kr
 import gdelt_collect
 import index_v1
 import live
@@ -311,8 +312,10 @@ def list_countries() -> list[dict]:
     if meta.empty:
         return []
     country_live = _live("country")
-    advisory = travel_advisory.by_iso3(_csv(ROOT / travel_advisory.ADVISORY_FILE, keep_default_na=False,
-                                            na_values=[""]))
+    advisory_df = _csv(ROOT / travel_advisory.ADVISORY_FILE, keep_default_na=False, na_values=[""])
+    if not data_go_kr.service_key() and not advisory_df.empty:  # 키를 뺀 뒤 CSV 에 남은 외교부 값은 숨김
+        advisory_df = advisory_df[advisory_df["source"] != "kr_mofa"]
+    advisory = travel_advisory.by_iso3(advisory_df)
     week_ago = _week_ago(meta)
     return [{
         "code": r["code"], "iso2": r["iso2"], "numeric": r["numeric"],
