@@ -26,6 +26,7 @@ import build_index
 import case_backtest  # CASES 만 사용. main() 은 __main__ 가드 안이라 import 부작용 없음
 import country_collect
 import data_go_kr
+import embassies
 import gdelt_collect
 import index_v1
 import live
@@ -159,6 +160,10 @@ def _daily_refresh() -> None:
         shelters.update()  # 파일 mtime 으로 하루 1회만 실제 수신
     except Exception:
         log.exception("대피시설 갱신 실패")
+    try:
+        embassies.update()  # 파일 mtime 으로 하루 1회만 실제 수신
+    except Exception:
+        log.exception("재외공관 갱신 실패")
     yesterday = pd.Timestamp.utcnow().tz_localize(None).normalize() - pd.Timedelta(days=1)
     if _recently_written(ROOT / country_collect.COUNTRY_FILE, ROOT / live.V2_DAILY_COUNTRY):
         return
@@ -466,5 +471,25 @@ def shelter_regions() -> dict:
         {"sido": s, "sigungu": sorted(set(df.loc[df["sido"] == s, "sigungu"].dropna()))}
         for s in shelters.SIDO if s in present]}
 
+
+
+# ---------- 재외공관·영사콜센터 ----------
+
+@app.get("/api/countries/{code}/embassies")
+def country_embassies(code: str) -> dict:
+    """나라의 대한민국 재외공관(대사관 먼저)과 영사콜센터. 키·파일 없음·KOR 이면 공관은 빈 목록."""
+    _country_or_404(code)
+    path = ROOT / embassies.EMBASSY_FILE
+    df = _csv(path, dtype=str, keep_default_na=False) if data_go_kr.service_key() else pd.DataFrame()
+    out = {"available": not df.empty,
+           "as_of": time.strftime("%Y-%m-%d", time.localtime(_mtime(path))) if len(df) else None,  # 수집일
+           "call_center": embassies.CALL_CENTER, "embassies": []}
+    iso2 = _iso2(code)
+    if df.empty or not iso2 or code == "KOR":
+        return out
+    rows = df[df["iso2"] == iso2]  # 파일은 이미 대사관 먼저 정렬돼 있음
+    out["embassies"] = [{k: r[k] or None for k in ("name", "kind", "address", "tel", "emergency_tel")}
+                        for r in rows.to_dict("records")]
+    return out
 
 assert set(RANGES) == {"24h", "7d"}  # news 쿼리 패턴과 동기화

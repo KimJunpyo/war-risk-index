@@ -10,6 +10,7 @@ import { PairTabs } from "@/features/select-pair";
 import { countryName, formatScore, GRADE_STYLE, newsKeywords, type Grade, type LiveScore } from "@/shared/lib";
 import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
+import { EmbassyContacts } from "@/widgets/embassy-contacts";
 import { GuideModal } from "@/widgets/guide-modal";
 import { NewsFeed } from "@/widgets/news-feed";
 import { PastCases } from "@/widgets/past-cases";
@@ -140,6 +141,8 @@ export function HomePage() {
               </p>
             )}
             <ActionGuide score={summary.blended ?? summary.daily7} status={summary.status} onMore={() => setGuideOpen(true)} />
+            {/* 해외 나라만 (한국·국가 쌍에서는 DOM 없음) */}
+            {summary.country && summary.country.code !== DEFAULT_COUNTRY && <EmbassyContacts code={summary.country.code} />}
           </div>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <RiskHistory basePath={summary.basePath} />
@@ -170,7 +173,7 @@ export function HomePage() {
 
       <footer className="mt-10 text-xs leading-relaxed text-neutral-600">
         데이터: GDELT 일별 파일(일별 뉴스 집계·과거 추이), GDELT 15분 파일(15분 뉴스 집계·실시간 24시간),
-        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), Google News(뉴스).
+        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), 외교부(재외공관·영사콜센터), Google News(뉴스).
         종합 = 두 뉴스 집계의 7일 점수를 흔들림이 작은 쪽에 더 무게를 둬 합친 값. 공식: FORMULA_v1.md.
       </footer>
     </main>
