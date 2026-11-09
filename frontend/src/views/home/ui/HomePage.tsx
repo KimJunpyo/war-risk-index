@@ -107,11 +107,12 @@ export function HomePage() {
                 className={`text-4xl font-semibold tabular-nums ${summary.grade ? GRADE_STYLE[summary.grade].text : "text-neutral-300"}`}
               />
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xs text-neutral-500">실시간 24시간</span>
-              <AnimatedNumber value={summary.live?.score} className="text-2xl font-semibold tabular-nums text-neutral-200" />
-              {!summary.live && <span className="text-[11px] text-neutral-600">기준선 준비 중</span>}
-            </div>
+            {summary.live && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-neutral-500">실시간 24시간</span>
+                <AnimatedNumber value={summary.live.score} className="text-2xl font-semibold tabular-nums text-neutral-200" />
+              </div>
+            )}
             <p className="w-full text-[11px] text-neutral-500">
               종합 점수 구성: 일별 뉴스 집계 {formatScore(summary.daily7)} · 15분 뉴스 집계 {formatScore(summary.min15)}
               {weights && (
