@@ -12,6 +12,7 @@ import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { EmbassyContacts } from "@/widgets/embassy-contacts";
 import { GuideModal } from "@/widgets/guide-modal";
+import { NearbyShelters } from "@/widgets/nearby-shelters";
 import { NewsFeed } from "@/widgets/news-feed";
 import { PastCases } from "@/widgets/past-cases";
 import { RiskHistory } from "@/widgets/risk-history";
@@ -49,6 +50,8 @@ export function HomePage() {
   const target = picked ?? defaultTarget(countries.data, pairs.data);
   const summary = target && summarize(target, pairs.data ?? [], countries.data ?? []);
   const weights = useBlendWeights().data;
+  // 한국 또는 한국이 낀 국가 쌍 (국내 대피소 표시 조건)
+  const korea = target?.kind === "country" ? target.code === DEFAULT_COUNTRY : !!target?.id.split("-").includes(DEFAULT_COUNTRY);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -141,6 +144,8 @@ export function HomePage() {
               </p>
             )}
             <ActionGuide score={summary.blended ?? summary.daily7} status={summary.status} onMore={() => setGuideOpen(true)} />
+            {/* 국내 대피소: 한국 또는 한국이 낀 국가 쌍일 때 체크리스트 아래 */}
+            {korea && <NearbyShelters />}
             {/* 해외 나라만 (한국·국가 쌍에서는 DOM 없음) */}
             {summary.country && summary.country.code !== DEFAULT_COUNTRY && <EmbassyContacts code={summary.country.code} />}
           </div>
@@ -173,7 +178,7 @@ export function HomePage() {
 
       <footer className="mt-10 text-xs leading-relaxed text-neutral-600">
         데이터: GDELT 일별 파일(일별 뉴스 집계·과거 추이), GDELT 15분 파일(15분 뉴스 집계·실시간 24시간),
-        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), 외교부(재외공관·영사콜센터), Google News(뉴스).
+        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), 외교부(재외공관·영사콜센터), 행정안전부(민방위 대피시설), Google News(뉴스).
         종합 = 두 뉴스 집계의 7일 점수를 흔들림이 작은 쪽에 더 무게를 둬 합친 값. 공식: FORMULA_v1.md.
       </footer>
     </main>
