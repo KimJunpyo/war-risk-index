@@ -12,6 +12,7 @@ import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { GuideModal } from "@/widgets/guide-modal";
 import { NewsFeed } from "@/widgets/news-feed";
+import { PastCases } from "@/widgets/past-cases";
 import { RiskHistory } from "@/widgets/risk-history";
 import { WeeklyMovers } from "@/widgets/weekly-movers";
 import { WorldMap } from "@/widgets/world-map";
@@ -145,6 +146,10 @@ export function HomePage() {
             <div className="lg:col-span-2">
               <CatalystPanel basePath={summary.basePath} />
             </div>
+            {/* 국가 쌍만 (국가 단위 비교는 범위 밖). 같은 기준인 일별 뉴스 집계 7일 값이 없으면 숨김 */}
+            {target?.kind === "pair" && summary.daily7 != null && (
+              <PastCases pairId={target.id} pairName={summary.title} current={summary.daily7} />
+            )}
           </div>
         </section>
       )}
