@@ -1,0 +1,714 @@
+{
+ "checked_at": "2026-11-06T04:48:40+00:00",
+ "feeds": [
+  {
+   "iso3": "KOR",
+   "name": "연합뉴스 북한",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://www.yna.co.kr/rss/northkorea.xml",
+   "ok": true,
+   "items": 98,
+   "latest": "2026-11-06T02:13:17+00:00",
+   "has_summary": 98
+  },
+  {
+   "iso3": "KOR",
+   "name": "연합뉴스 정치",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://www.yna.co.kr/rss/politics.xml",
+   "ok": true,
+   "items": 120,
+   "latest": "2026-11-06T04:42:54+00:00",
+   "has_summary": 120
+  },
+  {
+   "iso3": "KOR",
+   "name": "동아일보 정치",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://rss.donga.com/politics.xml",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-06T04:32:38+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "KOR",
+   "name": "한겨레 정치",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://www.hani.co.kr/rss/politics/",
+   "ok": true,
+   "items": 30,
+   "latest": null,
+   "has_summary": 0
+  },
+  {
+   "iso3": "KOR",
+   "name": "BBC 코리아",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/korean/rss.xml",
+   "ok": true,
+   "items": 19,
+   "latest": "2026-11-06T03:46:50+00:00",
+   "has_summary": 19
+  },
+  {
+   "iso3": "PRK",
+   "name": "Daily NK (한국어)",
+   "lang": "ko",
+   "kind": "media",
+   "url": "https://www.dailynk.com/feed/",
+   "ok": true,
+   "items": 10,
+   "latest": "2026-11-06T03:32:15+00:00",
+   "has_summary": 10
+  },
+  {
+   "iso3": "PRK",
+   "name": "NK News",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.nknews.org/feed/",
+   "ok": true,
+   "items": 300,
+   "latest": "2026-11-05T09:36:23+00:00",
+   "has_summary": 300
+  },
+  {
+   "iso3": "PRK",
+   "name": "38 North",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.38north.org/feed/",
+   "ok": true,
+   "items": 8,
+   "latest": "2026-11-04T23:06:30+00:00",
+   "has_summary": 8
+  },
+  {
+   "iso3": "RUS",
+   "name": "TASS (러시아어)",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://tass.ru/rss/v2.xml",
+   "ok": true,
+   "items": 100,
+   "latest": "2026-11-06T04:42:21+00:00",
+   "has_summary": 96
+  },
+  {
+   "iso3": "RUS",
+   "name": "RIA Novosti",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://ria.ru/export/rss2/archive/index.xml",
+   "ok": true,
+   "items": 95,
+   "latest": "2026-11-06T04:45:42+00:00",
+   "has_summary": 0
+  },
+  {
+   "iso3": "RUS",
+   "name": "Topwar (군사)",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://topwar.ru/rss.xml",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-06T04:25:22+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "RUS",
+   "name": "Kommersant",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://www.kommersant.ru/RSS/news.xml",
+   "ok": true,
+   "items": 314,
+   "latest": "2026-11-06T04:40:33+00:00",
+   "has_summary": 314
+  },
+  {
+   "iso3": "RUS",
+   "name": "Interfax",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://www.interfax.ru/rss.asp",
+   "ok": true,
+   "items": 25,
+   "latest": "2026-11-06T04:31:00+00:00",
+   "has_summary": 25
+  },
+  {
+   "iso3": "RUS",
+   "name": "BBC 러시아어",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/russian/rss.xml",
+   "ok": true,
+   "items": 37,
+   "latest": "2026-11-06T03:57:10+00:00",
+   "has_summary": 37
+  },
+  {
+   "iso3": "RUS",
+   "name": "Meduza",
+   "lang": "ru",
+   "kind": "media",
+   "url": "https://meduza.io/rss/all",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-05T22:11:56+00:00",
+   "has_summary": 30
+  },
+  {
+   "iso3": "UKR",
+   "name": "Ukrainska Pravda",
+   "lang": "uk",
+   "kind": "media",
+   "url": "https://www.pravda.com.ua/rss/",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-06T04:37:00+00:00",
+   "has_summary": 15
+  },
+  {
+   "iso3": "UKR",
+   "name": "Ukrinform 전쟁",
+   "lang": "uk",
+   "kind": "media",
+   "url": "https://www.ukrinform.ua/rss/rubric-ato",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-06T03:47:00+00:00",
+   "has_summary": 30
+  },
+  {
+   "iso3": "UKR",
+   "name": "Militarnyi",
+   "lang": "uk",
+   "kind": "media",
+   "url": "https://mil.in.ua/uk/news/feed/",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-05T21:44:27+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "UKR",
+   "name": "BBC 우크라이나어",
+   "lang": "uk",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/ukrainian/rss.xml",
+   "ok": true,
+   "items": 17,
+   "latest": "2026-11-05T17:03:03+00:00",
+   "has_summary": 17
+  },
+  {
+   "iso3": "ISR",
+   "name": "Ynet (히브리어)",
+   "lang": "he",
+   "kind": "media",
+   "url": "https://www.ynet.co.il/Integration/StoryRss2.xml",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-06T04:06:58+00:00",
+   "has_summary": 30
+  },
+  {
+   "iso3": "ISR",
+   "name": "Maariv (히브리어)",
+   "lang": "he",
+   "kind": "media",
+   "url": "https://www.maariv.co.il/Rss/RssChadashot",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-06T04:25:27+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "ISR",
+   "name": "Jerusalem Post",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.jpost.com/rss/rssfeedsfrontpage.aspx",
+   "ok": true,
+   "items": 26,
+   "latest": "2026-11-06T06:24:44+00:00",
+   "has_summary": 26
+  },
+  {
+   "iso3": "ISR",
+   "name": "Haaretz (히브리어)",
+   "lang": "he",
+   "kind": "media",
+   "url": "https://www.haaretz.co.il/srv/htz---all-articles",
+   "ok": true,
+   "items": 100,
+   "latest": "2026-11-06T04:01:06+00:00",
+   "has_summary": 70
+  },
+  {
+   "iso3": "IRN",
+   "name": "Mehr (페르시아어)",
+   "lang": "fa",
+   "kind": "media",
+   "url": "https://www.mehrnews.com/rss",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-06T04:45:06+00:00",
+   "has_summary": 30
+  },
+  {
+   "iso3": "IRN",
+   "name": "ISNA (페르시아어)",
+   "lang": "fa",
+   "kind": "media",
+   "url": "https://www.isna.ir/rss",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-06T04:42:28+00:00",
+   "has_summary": 28
+  },
+  {
+   "iso3": "IRN",
+   "name": "Iran International",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.iranintl.com/en/feed",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-06T04:14:28+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "IRN",
+   "name": "BBC 페르시아어",
+   "lang": "fa",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/persian/rss.xml",
+   "ok": true,
+   "items": 33,
+   "latest": "2026-11-06T00:26:53+00:00",
+   "has_summary": 33
+  },
+  {
+   "iso3": "PSE",
+   "name": "Al Jazeera (아랍어)",
+   "lang": "ar",
+   "kind": "media",
+   "url": "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdff8b8cab9",
+   "ok": true,
+   "items": 25,
+   "latest": "2026-11-06T00:47:04+00:00",
+   "has_summary": 25
+  },
+  {
+   "iso3": "PSE",
+   "name": "BBC 아랍어",
+   "lang": "ar",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/arabic/rss.xml",
+   "ok": true,
+   "items": 24,
+   "latest": "2026-11-06T04:05:41+00:00",
+   "has_summary": 24
+  },
+  {
+   "iso3": "PSE",
+   "name": "Al Jazeera (영어)",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.aljazeera.com/xml/rss/all.xml",
+   "ok": true,
+   "items": 25,
+   "latest": "2026-11-06T04:30:26+00:00",
+   "has_summary": 25
+  },
+  {
+   "iso3": "CHN",
+   "name": "신화사 군사 (중국어)",
+   "lang": "zh",
+   "kind": "media",
+   "url": "http://www.xinhuanet.com/mil/news_mil.xml",
+   "ok": true,
+   "items": 300,
+   "latest": null,
+   "has_summary": 289
+  },
+  {
+   "iso3": "CHN",
+   "name": "CGTN 중국",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.cgtn.com/subscribe/rss/section/china.xml",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-06T02:40:19+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "CHN",
+   "name": "BBC 중국어",
+   "lang": "zh",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
+   "ok": true,
+   "items": 42,
+   "latest": "2026-11-06T04:35:46+00:00",
+   "has_summary": 42
+  },
+  {
+   "iso3": "CHN",
+   "name": "SCMP 중국",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.scmp.com/rss/4/feed",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-06T04:45:09+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "TWN",
+   "name": "중앙사 정치 (중국어)",
+   "lang": "zh",
+   "kind": "media",
+   "url": "https://feeds.feedburner.com/rsscna/politics",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-06T03:22:57+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "TWN",
+   "name": "자유시보 정치 (중국어)",
+   "lang": "zh",
+   "kind": "media",
+   "url": "https://news.ltn.com.tw/rss/politics.xml",
+   "ok": true,
+   "items": 40,
+   "latest": "2026-11-06T04:41:45+00:00",
+   "has_summary": 40
+  },
+  {
+   "iso3": "TWN",
+   "name": "RTI 대만국제방송 (중국어)",
+   "lang": "zh",
+   "kind": "media",
+   "url": "https://www.rti.org.tw/rss",
+   "ok": true,
+   "items": 165,
+   "latest": "2026-11-06T04:01:49+00:00",
+   "has_summary": 165
+  },
+  {
+   "iso3": "IND",
+   "name": "The Hindu",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.thehindu.com/news/national/feeder/default.rss",
+   "ok": true,
+   "items": 60,
+   "latest": "2026-11-06T04:41:22+00:00",
+   "has_summary": 47
+  },
+  {
+   "iso3": "IND",
+   "name": "Indian Express",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://indianexpress.com/section/india/feed/",
+   "ok": true,
+   "items": 200,
+   "latest": "2026-11-06T04:19:52+00:00",
+   "has_summary": 0
+  },
+  {
+   "iso3": "IND",
+   "name": "BBC 힌디어",
+   "lang": "hi",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
+   "ok": true,
+   "items": 38,
+   "latest": "2026-11-06T04:32:36+00:00",
+   "has_summary": 38
+  },
+  {
+   "iso3": "IND",
+   "name": "Amar Ujala (힌디어)",
+   "lang": "hi",
+   "kind": "media",
+   "url": "https://www.amarujala.com/rss/breaking-news.xml",
+   "ok": true,
+   "items": 11,
+   "latest": "2026-11-06T04:17:38+00:00",
+   "has_summary": 11
+  },
+  {
+   "iso3": "IND",
+   "name": "NDTV Khabar (힌디어)",
+   "lang": "hi",
+   "kind": "media",
+   "url": "https://feeds.feedburner.com/ndtvkhabar-latest",
+   "ok": true,
+   "items": 100,
+   "latest": "2026-11-06T03:35:17+00:00",
+   "has_summary": 100
+  },
+  {
+   "iso3": "IND",
+   "name": "PIB 국방부",
+   "lang": "en",
+   "kind": "gov",
+   "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
+   "ok": true,
+   "items": 20,
+   "latest": null,
+   "has_summary": 0
+  },
+  {
+   "iso3": "PAK",
+   "name": "Dawn",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.dawn.com/feeds/pakistan",
+   "ok": true,
+   "items": 30,
+   "latest": "2026-11-06T04:45:26+00:00",
+   "has_summary": 30
+  },
+  {
+   "iso3": "PAK",
+   "name": "Express Tribune",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://tribune.com.pk/feed/home",
+   "ok": true,
+   "items": 73,
+   "latest": "2026-11-05T22:02:22+00:00",
+   "has_summary": 73
+  },
+  {
+   "iso3": "PAK",
+   "name": "Geo News",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.geo.tv/rss/1/1",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-06T00:45:00+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "PAK",
+   "name": "Express (우르두어)",
+   "lang": "ur",
+   "kind": "media",
+   "url": "https://www.express.pk/feed/",
+   "ok": true,
+   "items": 50,
+   "latest": "2026-11-05T23:25:34+00:00",
+   "has_summary": 50
+  },
+  {
+   "iso3": "PAK",
+   "name": "BBC 우르두어",
+   "lang": "ur",
+   "kind": "media",
+   "url": "https://feeds.bbci.co.uk/urdu/rss.xml",
+   "ok": true,
+   "items": 22,
+   "latest": "2026-11-06T04:13:41+00:00",
+   "has_summary": 22
+  },
+  {
+   "iso3": "USA",
+   "name": "국방부 보도자료",
+   "lang": "en",
+   "kind": "gov",
+   "url": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=9&Site=945&max=20",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-05T19:00:29+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "USA",
+   "name": "국방부 뉴스",
+   "lang": "en",
+   "kind": "gov",
+   "url": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945&max=20",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-05T23:25:00+00:00",
+   "has_summary": 20
+  },
+  {
+   "iso3": "USA",
+   "name": "Military Times",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.militarytimes.com/arc/outboundfeeds/rss/",
+   "ok": true,
+   "items": 10,
+   "latest": "2026-11-06T00:47:21+00:00",
+   "has_summary": 10
+  },
+  {
+   "iso3": "USA",
+   "name": "Defense News",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.defensenews.com/arc/outboundfeeds/rss/",
+   "ok": true,
+   "items": 10,
+   "latest": "2026-11-05T22:55:48+00:00",
+   "has_summary": 10
+  },
+  {
+   "iso3": "USA",
+   "name": "Breaking Defense",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://breakingdefense.com/feed/",
+   "ok": true,
+   "items": 15,
+   "latest": "2026-11-05T21:55:18+00:00",
+   "has_summary": 15
+  },
+  {
+   "iso3": "USA",
+   "name": "Defense One",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://www.defenseone.com/rss/all/",
+   "ok": true,
+   "items": 20,
+   "latest": "2026-11-05T21:45:20+00:00",
+   "has_summary": 19
+  },
+  {
+   "iso3": "USA",
+   "name": "War on the Rocks",
+   "lang": "en",
+   "kind": "media",
+   "url": "https://warontherocks.com/feed/",
+   "ok": true,
+   "items": 100,
+   "latest": "2026-11-05T09:00:03+00:00",
+   "has_summary": 100
+  }
+ ],
+ "failed": [
+  {
+   "iso3": "KOR",
+   "name": "정책브리핑 국방부",
+   "url": "https://www.korea.kr/rss/dept_mnd.xml",
+   "error": "HTTPError: HTTP Error 404: Not Found"
+  },
+  {
+   "iso3": "KOR",
+   "name": "정책브리핑 통일부",
+   "url": "https://www.korea.kr/rss/dept_unikorea.xml",
+   "error": "HTTPError: HTTP Error 404: Not Found"
+  },
+  {
+   "iso3": "PRK",
+   "name": "KCNA Watch",
+   "url": "https://kcnawatch.org/feed/",
+   "error": "ParseError: not well-formed (invalid token): line 6, column 38"
+  },
+  {
+   "iso3": "RUS",
+   "name": "러시아 국방부",
+   "url": "https://function.mil.ru/rss_feeds/reference_to_general.htm?contenttype=xml",
+   "error": "URLError: <urlopen error [Errno 11001] getaddrinfo failed>"
+  },
+  {
+   "iso3": "UKR",
+   "name": "Kyiv Independent",
+   "url": "https://kyivindependent.com/rss/",
+   "error": "HTTPError: HTTP Error 404: Not Found"
+  },
+  {
+   "iso3": "ISR",
+   "name": "Times of Israel",
+   "url": "https://www.timesofisrael.com/feed/",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  },
+  {
+   "iso3": "IRN",
+   "name": "Tasnim (페르시아어)",
+   "url": "https://www.tasnimnews.com/fa/rss/feed/0/7/0/",
+   "error": "URLError: <urlopen error [Errno 11001] getaddrinfo failed>"
+  },
+  {
+   "iso3": "IRN",
+   "name": "IRNA (페르시아어)",
+   "url": "https://www.irna.ir/rss",
+   "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certific"
+  },
+  {
+   "iso3": "IRN",
+   "name": "Tasnim (영어)",
+   "url": "https://www.tasnimnews.com/en/rss/feed/0/7/0/all-stories",
+   "error": "URLError: <urlopen error [Errno 11001] getaddrinfo failed>"
+  },
+  {
+   "iso3": "PSE",
+   "name": "Middle East Eye",
+   "url": "https://www.middleeasteye.net/rss",
+   "error": "ParseError: not well-formed (invalid token): line 1, column 0"
+  },
+  {
+   "iso3": "PSE",
+   "name": "WAFA (아랍어)",
+   "url": "https://www.wafa.ps/rss.aspx",
+   "error": "HTTPError: HTTP Error 404: Not Found"
+  },
+  {
+   "iso3": "CHN",
+   "name": "Global Times",
+   "url": "https://www.globaltimes.cn/rss/outbrain.xml",
+   "error": "stale: 최신 2026-10-09"
+  },
+  {
+   "iso3": "CHN",
+   "name": "China Daily",
+   "url": "http://www.chinadaily.com.cn/rss/china_rss.xml",
+   "error": "HTTPError: HTTP Error 404: Not Found"
+  },
+  {
+   "iso3": "CHN",
+   "name": "인민망 군사 (중국어)",
+   "url": "http://www.people.com.cn/rss/military.xml",
+   "error": "stale: 최신 2025-06-04"
+  },
+  {
+   "iso3": "TWN",
+   "name": "Taipei Times",
+   "url": "https://www.taipeitimes.com/xml/index.rss",
+   "error": null
+  },
+  {
+   "iso3": "TWN",
+   "name": "연합보 양안 (중국어)",
+   "url": "https://udn.com/rssfeed/news/2/6640?ch=news",
+   "error": "stale: 최신 1970-01-01"
+  },
+  {
+   "iso3": "USA",
+   "name": "국무부 보도자료",
+   "url": "https://www.state.gov/rss-feed/press-releases/feed/",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  }
+ ]
+}

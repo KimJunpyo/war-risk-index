@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 수집 데이터·산출물 (수집 스크립트로 재생성)
+data/
+out/
+
+# 비밀값
+.env
+.env.*
+
+# 로컬 도구 설정
+.claude/settings.local.json
