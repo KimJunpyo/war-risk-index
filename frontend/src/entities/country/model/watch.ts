@@ -26,11 +26,14 @@ export function watchReasons(c: Country): WatchReason[] {
   return r;
 }
 
-/** 사유가 있는 나라만, 종합 점수 높은 순 (사유는 태그로 표시) */
-export function watchList(countries: Country[]): { country: Country; reasons: WatchReason[] }[] {
-  const score = (c: Country) => c.latest.blended ?? c.latest.weekly ?? -Infinity;
+/** 사유가 있는 나라만, 점수 높은 순 (기본 = 종합, 점수 없는 나라는 맨 아래) */
+export function watchList(
+  countries: Country[],
+  score: (c: Country) => number | null | undefined = (c) => c.latest.blended ?? c.latest.weekly,
+): { country: Country; reasons: WatchReason[] }[] {
+  const s = (c: Country) => score(c) ?? -Infinity;
   return countries
     .map((country) => ({ country, reasons: watchReasons(country) }))
     .filter((x) => x.reasons.length > 0)
-    .sort((a, b) => score(b.country) - score(a.country));
+    .sort((a, b) => s(b.country) - s(a.country));
 }
