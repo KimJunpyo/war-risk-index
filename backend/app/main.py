@@ -256,6 +256,17 @@ def _country_or_404(code: str) -> pd.Series:
     return row.iloc[0]
 
 
+def _week_ago(meta: pd.DataFrame) -> dict[str, dict]:
+    """나라별 기준일(meta date) − 7일 행의 종합 점수 {code: {date, blended}}. 그 날 행이 없으면 키 없음."""
+    idx = _csv(COUNTRY_INDEX_FILE)
+    if idx.empty:
+        return {}
+    wanted = pd.DataFrame({"country": meta["code"],
+                           "date": (pd.to_datetime(meta["date"]) - pd.Timedelta(days=7)).dt.strftime("%Y-%m-%d")})
+    rows = wanted.merge(idx[["country", "date", "blended"]], on=["country", "date"])
+    return {r["country"]: {"date": r["date"], "blended": r["blended"]} for r in _records(rows)}
+
+
 @app.get("/api/countries")
 def list_countries() -> list[dict]:
     meta = _meta()
@@ -264,9 +275,11 @@ def list_countries() -> list[dict]:
     country_live = _live("country")
     advisory = travel_advisory.by_iso3(_csv(ROOT / travel_advisory.ADVISORY_FILE, keep_default_na=False,
                                             na_values=[""]))
+    week_ago = _week_ago(meta)
     return [{
         "code": r["code"], "iso2": r["iso2"], "numeric": r["numeric"],
         "latest": {k: r[k] for k in INDEX_COLUMNS},
+        "week_ago": week_ago.get(r["code"]),
         "live": _live_value(country_live, [r["code"]]),
         "status": r["status"], "status_reason": r["status_reason"],
         # 교전 상대: 나라(ISO alpha-2, 화면에서 한국어로) / 무장단체(UCDP 원문 이름)

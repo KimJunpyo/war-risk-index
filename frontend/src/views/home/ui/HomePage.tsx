@@ -13,6 +13,7 @@ import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { GuideModal } from "@/widgets/guide-modal";
 import { NewsFeed } from "@/widgets/news-feed";
 import { RiskHistory } from "@/widgets/risk-history";
+import { WeeklyMovers } from "@/widgets/weekly-movers";
 import { WorldMap } from "@/widgets/world-map";
 
 // 첫 접속 시 기본으로 보여줄 나라 (GDELT/CAMEO 코드)
@@ -69,11 +70,14 @@ export function HomePage() {
 
       <StatusText loading={countries.loading} error={countries.error} />
       {countries.data && countries.data.length > 0 && (
-        <WorldMap
-          countries={countries.data}
-          selected={target?.kind === "country" ? target.code : null}
-          onSelect={(c) => setPicked({ kind: "country", code: c.code })}
-        />
+        <>
+          <WorldMap
+            countries={countries.data}
+            selected={target?.kind === "country" ? target.code : null}
+            onSelect={(c) => setPicked({ kind: "country", code: c.code })}
+          />
+          <WeeklyMovers countries={countries.data} onSelect={(c) => setPicked({ kind: "country", code: c.code })} />
+        </>
       )}
 
       <h2 className="mb-3 mt-8 text-sm font-semibold tracking-wide text-neutral-300">주요 분쟁 쌍</h2>
