@@ -1,4 +1,5 @@
 """전쟁 가능성 지수 API. 프로젝트 루트에서 실행: uvicorn backend.app.main:app
+루트 .env 가 있으면 시작 시 읽는다(.env.example 참고, 이미 설정된 환경변수가 우선).
 
 시작하면 백그라운드 스레드가 15분마다 GDELT 2.0 실시간 슬롯을 갱신하고,
 새 GDELT 1.0 일별 파일이 나오면 수집·지수 계산을 다시 돌린다.
@@ -12,6 +13,7 @@ import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import dotenv
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +32,11 @@ from backend.app.news import RANGES, fetch_news
 from backend.app.pairs import ACTOR_NAMES, PAIRS
 
 ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = ROOT / ".env"
+if ENV_FILE.is_file():  # 아래 os.getenv 들보다 먼저 읽어야 .env 값이 반영됨
+    dotenv.load_dotenv(ENV_FILE, override=False)
+# 공공데이터포털(data.go.kr) 일반 인증키 환경변수 이름
+DATA_GO_KR_SERVICE_KEY = "DATA_GO_KR_SERVICE_KEY"
 INDEX_FILE = ROOT / "out" / "index_v1.csv"
 CATALYST_FILE = ROOT / "data" / "gdelt_catalyst.csv"
 COUNTRY_INDEX_FILE = ROOT / build_country_index.COUNTRY_INDEX_FILE
@@ -59,6 +66,8 @@ CASE_LABELS = {
 }
 
 log = logging.getLogger("war-risk")
+if not os.getenv(DATA_GO_KR_SERVICE_KEY):
+    log.warning("%s 가 없어 공공데이터 API 기능은 꺼진 상태로 기동함", DATA_GO_KR_SERVICE_KEY)
 _cache: dict[tuple[Path, str], tuple[float, pd.DataFrame]] = {}
 _live_cache: dict[tuple, pd.DataFrame] = {}
 
