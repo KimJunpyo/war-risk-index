@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import blend
 import build_country_index
 import build_index
+import case_backtest  # CASES 만 사용. main() 은 __main__ 가드 안이라 import 부작용 없음
 import country_collect
 import gdelt_collect
 import index_v1
@@ -41,6 +42,21 @@ COLLECTOR_IDLE_SECONDS = 600  # 이 시간 안에 수집 파일이 바뀌었으�
 COUNTRY_NEWS_QUERY = "{name} (군사 OR 국방 OR 분쟁 OR 공격 OR 미사일)"
 # 지수 표의 공통 열 (v1 7일, v2 7일, 종합, 24시간, 등급)
 INDEX_COLUMNS = ["date", "daily", "weekly", "v2_weekly", "blended", "grade"]
+
+# 과거 위기 사례 일반인용 이름 (FORMULA_v1.md 검증 표 표기, case_backtest.CASES 이름 기준)
+CASE_LABELS = {
+    "러우 2022": "러시아–우크라이나 개전",
+    "이란 2025": "이스라엘–이란 개전",
+    "아르-아제 2020": "아르메니아–아제르바이잔 개전",
+    "인도-파키 2025": "인도–파키스탄 개전",
+    "하마스 2023": "하마스 기습",
+    "남북 2017": "남북 화염과 분노",
+    "남북 2015": "남북 서부전선 포격",
+    "미-이란 2020": "미국–이란 솔레이마니",
+    "중-대만 2022": "중국–대만 펠로시 방문 후 훈련",
+    "인도-파키 2019": "인도–파키스탄 발라코트",
+    "러우 2021 집결": "러시아–우크라이나 병력 집결",
+}
 
 log = logging.getLogger("war-risk")
 _cache: dict[tuple[Path, str], tuple[float, pd.DataFrame]] = {}
@@ -180,6 +196,19 @@ def pair_index(pair_id: str) -> list[dict]:
     return _records(idx[idx["pair"] == pair_id][INDEX_COLUMNS])
 
 
+@app.get("/api/cases")
+def list_cases() -> list[dict]:
+    """과거 위기 사례별 T-0 전날 7일 점수(weekly). 여러 쌍이면 최댓값, index_v1.csv 에 없는 쌍(USA-IRN 등)은 빠짐."""
+    idx = _index()
+    out = []
+    for name, is_war, t0, pairs in case_backtest.CASES:
+        t1 = (pd.Timestamp(t0) - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        score = idx[(idx["date"] == t1) & idx["pair"].isin(pairs)]["weekly"].max() if len(idx) else None
+        out.append({"name": name, "label": f"{CASE_LABELS.get(name, name)} ({t0})", "is_war": is_war, "t0": t0,
+                    "pairs": pairs, "score": None if pd.isna(score) else float(score)})
+    return out
+
+
 def _iso2(code: str) -> str | None:
     info = build_country_index.iso_info(code) if code else None
     return info["iso2"] if info else None
@@ -256,6 +285,17 @@ def _country_or_404(code: str) -> pd.Series:
     return row.iloc[0]
 
 
+def _week_ago(meta: pd.DataFrame) -> dict[str, dict]:
+    """나라별 기준일(meta date) − 7일 행의 종합 점수 {code: {date, blended}}. 그 날 행이 없으면 키 없음."""
+    idx = _csv(COUNTRY_INDEX_FILE)
+    if idx.empty:
+        return {}
+    wanted = pd.DataFrame({"country": meta["code"],
+                           "date": (pd.to_datetime(meta["date"]) - pd.Timedelta(days=7)).dt.strftime("%Y-%m-%d")})
+    rows = wanted.merge(idx[["country", "date", "blended"]], on=["country", "date"])
+    return {r["country"]: {"date": r["date"], "blended": r["blended"]} for r in _records(rows)}
+
+
 @app.get("/api/countries")
 def list_countries() -> list[dict]:
     meta = _meta()
@@ -264,9 +304,11 @@ def list_countries() -> list[dict]:
     country_live = _live("country")
     advisory = travel_advisory.by_iso3(_csv(ROOT / travel_advisory.ADVISORY_FILE, keep_default_na=False,
                                             na_values=[""]))
+    week_ago = _week_ago(meta)
     return [{
         "code": r["code"], "iso2": r["iso2"], "numeric": r["numeric"],
         "latest": {k: r[k] for k in INDEX_COLUMNS},
+        "week_ago": week_ago.get(r["code"]),
         "live": _live_value(country_live, [r["code"]]),
         "status": r["status"], "status_reason": r["status_reason"],
         # 교전 상대: 나라(ISO alpha-2, 화면에서 한국어로) / 무장단체(UCDP 원문 이름)

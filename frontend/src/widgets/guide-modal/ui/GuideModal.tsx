@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { STATUS_STYLE, WATCH_CRITERIA } from "@/entities/country";
-import { ADVISORY_LEVELS, SCORE_BANDS } from "@/entities/guide";
+import { ADVISORY_LEVELS, CHECKLIST_SOURCE, SCORE_BANDS } from "@/entities/guide";
 
 const STATUS_KEYS = Object.keys(STATUS_STYLE) as (keyof typeof STATUS_STYLE)[];
 
@@ -50,13 +50,17 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
                   <span className="text-xs text-neutral-500">{b.range}</span>
                 </div>
                 <ul className="list-disc space-y-0.5 pl-5 text-xs text-neutral-300">
-                  {b.actions.map((a) => <li key={a}>{a}</li>)}
+                  {b.items.map((it) => <li key={it.id}>{it.text}</li>)}
                 </ul>
               </div>
             ))}
           </div>
           <p className="mt-2 text-xs text-neutral-500">
-            일반적인 민방위·재난 대비 권고를 참고한 개인 실험용 가이드입니다. 정부·민방위·외교부의 공식 경보가 항상 우선합니다.
+            일반적인 비상 대비 권고를 참고해 자체 작성한 실험용 가이드입니다(참고:{" "}
+            <a href={CHECKLIST_SOURCE.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">
+              {CHECKLIST_SOURCE.name}
+            </a>
+            ). 정부·민방위·외교부의 공식 경보가 항상 우선합니다.
           </p>
         </section>
 

@@ -12,7 +12,9 @@ import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { GuideModal } from "@/widgets/guide-modal";
 import { NewsFeed } from "@/widgets/news-feed";
+import { PastCases } from "@/widgets/past-cases";
 import { RiskHistory } from "@/widgets/risk-history";
+import { WeeklyMovers } from "@/widgets/weekly-movers";
 import { WorldMap } from "@/widgets/world-map";
 
 // 첫 접속 시 기본으로 보여줄 나라 (GDELT/CAMEO 코드)
@@ -69,11 +71,14 @@ export function HomePage() {
 
       <StatusText loading={countries.loading} error={countries.error} />
       {countries.data && countries.data.length > 0 && (
-        <WorldMap
-          countries={countries.data}
-          selected={target?.kind === "country" ? target.code : null}
-          onSelect={(c) => setPicked({ kind: "country", code: c.code })}
-        />
+        <>
+          <WorldMap
+            countries={countries.data}
+            selected={target?.kind === "country" ? target.code : null}
+            onSelect={(c) => setPicked({ kind: "country", code: c.code })}
+          />
+          <WeeklyMovers countries={countries.data} onSelect={(c) => setPicked({ kind: "country", code: c.code })} />
+        </>
       )}
 
       <h2 className="mb-3 mt-8 text-sm font-semibold tracking-wide text-neutral-300">주요 분쟁 쌍</h2>
@@ -141,6 +146,10 @@ export function HomePage() {
             <div className="lg:col-span-2">
               <CatalystPanel basePath={summary.basePath} />
             </div>
+            {/* 국가 쌍만 (국가 단위 비교는 범위 밖). 같은 기준인 일별 뉴스 집계 7일 값이 없으면 숨김 */}
+            {target?.kind === "pair" && summary.daily7 != null && (
+              <PastCases pairId={target.id} pairName={summary.title} current={summary.daily7} />
+            )}
           </div>
         </section>
       )}

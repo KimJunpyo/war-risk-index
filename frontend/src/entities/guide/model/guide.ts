@@ -1,6 +1,7 @@
 import { HIGH_RISK, TENSION } from "@/shared/lib";
+import { CHECKLIST, type ChecklistItem } from "./checklist";
 
-// 점수별 행동 권고. 일반적인 민방위·재난 대비 권고(비상용품 3일치 등)를 참고한 개인 실험용 가이드
+// 점수별 행동 권고. 항목 문구는 checklist.ts (일반적인 비상 대비 권고를 참고한 자체 작성 문장)
 export const EXTREME = 150; // 평시 대비 +4σ
 const WAR_STATUSES = ["전쟁 중", "내전 중"];
 
@@ -9,44 +10,14 @@ export interface ScoreBand {
   range: string;
   title: string;
   tone: string; // tailwind 색
-  actions: string[];
+  items: ChecklistItem[];
 }
 
 export const SCORE_BANDS: ScoreBand[] = [
-  {
-    id: "extreme", range: `${EXTREME}점 이상 또는 전쟁·내전 중`, title: "행동", tone: "text-fuchsia-300",
-    actions: [
-      "정부·민방위 경보와 대피 지시를 최우선으로 따르기",
-      "비상 가방을 현관 가까이 두고 바로 대피할 수 있게 유지",
-      "해당 국가 방문 취소, 체류 중이면 대사관의 철수·대피 안내 따르기",
-      "가족과 집결 장소·연락 방법 다시 확인",
-    ],
-  },
-  {
-    id: "high", range: `${HIGH_RISK}~${EXTREME}점`, title: "준비", tone: "text-red-300",
-    actions: [
-      "3일치 비상용품 실제로 준비: 물(1인 1일 약 3L), 조리 없이 먹을 식량, 상비약·처방약",
-      "소액 현금, 신분증·여권·중요 서류 사본, 보조배터리, 손전등, 휴대용 라디오",
-      "차량 연료 절반 이상 유지, 가까운 대피소와 대피 경로 직접 확인",
-      "해당 지역 여행은 연기 검토, 해외 체류 중이면 영사 연락처·재외국민 등록 확인",
-    ],
-  },
-  {
-    id: "tension", range: `${TENSION}~${HIGH_RISK}점`, title: "점검", tone: "text-amber-300",
-    actions: [
-      "정부 발표와 뉴스를 평소보다 자주 확인",
-      "비상용품 목록 점검, 물·식량 1~2일치 확보",
-      "해당 국가 여행 계획이 있으면 여행경보 단계 확인",
-    ],
-  },
-  {
-    id: "calm", range: `${TENSION}점 미만`, title: "평상시", tone: "text-emerald-300",
-    actions: [
-      "가까운 대피소 위치 알아두기 (예: 안전디딤돌 앱, 국민재난안전포털)",
-      "가족 비상연락망과 집결 장소 정해두기",
-      "비상용품 목록 만들어두기",
-    ],
-  },
+  { id: "extreme", range: `${EXTREME}점 이상 또는 전쟁·내전 중`, title: "행동", tone: "text-fuchsia-300", items: CHECKLIST.extreme },
+  { id: "high", range: `${HIGH_RISK}~${EXTREME}점`, title: "준비", tone: "text-red-300", items: CHECKLIST.high },
+  { id: "tension", range: `${TENSION}~${HIGH_RISK}점`, title: "점검", tone: "text-amber-300", items: CHECKLIST.tension },
+  { id: "calm", range: `${TENSION}점 미만`, title: "평상시", tone: "text-emerald-300", items: CHECKLIST.calm },
 ];
 
 export function bandFor(score: number | null | undefined, status?: string | null): ScoreBand | null {

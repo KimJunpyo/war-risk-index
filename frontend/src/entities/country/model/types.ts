@@ -27,6 +27,7 @@ export interface Country {
     blended: number | null; // 종합 (v1·v2 가중 결합)
     grade: Grade | null;
   };
+  week_ago: { date: string; blended: number | null } | null; // latest.date − 7일 종합 (그 날 행이 없으면 null)
   live: LiveScore | null;
   status: CountryStatus | null;
   status_reason: string | null;
