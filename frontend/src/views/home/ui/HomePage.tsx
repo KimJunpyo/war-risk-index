@@ -13,7 +13,6 @@ import { CatalystPanel } from "@/widgets/catalyst-panel";
 import { GuideModal } from "@/widgets/guide-modal";
 import { NewsFeed } from "@/widgets/news-feed";
 import { RiskHistory } from "@/widgets/risk-history";
-import { ThreatPanel } from "@/widgets/threat-panel";
 import { WorldMap } from "@/widgets/world-map";
 
 // 첫 접속 시 기본으로 보여줄 나라 (GDELT/CAMEO 코드)
@@ -136,8 +135,10 @@ export function HomePage() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <RiskHistory basePath={summary.basePath} />
             <NewsFeed newsPath={summary.newsPath} />
-            <CatalystPanel basePath={summary.basePath} />
-            <ThreatPanel basePath={summary.basePath} />
+            {/* 패널이 3개라 2열 그리드 마지막 칸이 비지 않도록 두 열을 모두 차지 */}
+            <div className="lg:col-span-2">
+              <CatalystPanel basePath={summary.basePath} />
+            </div>
           </div>
         </section>
       )}

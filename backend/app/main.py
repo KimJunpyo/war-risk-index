@@ -4,7 +4,6 @@
 새 GDELT 1.0 일별 파일이 나오면 수집·지수 계산을 다시 돌린다.
 """
 
-import json
 import logging
 import os
 import threading
@@ -17,7 +16,6 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-import ai_threat
 import blend
 import build_country_index
 import build_index
@@ -25,7 +23,6 @@ import country_collect
 import gdelt_collect
 import index_v1
 import live
-import newsroom
 import travel_advisory
 import ucdp
 from backend.app.news import RANGES, fetch_news
@@ -37,8 +34,6 @@ CATALYST_FILE = ROOT / "data" / "gdelt_catalyst.csv"
 COUNTRY_INDEX_FILE = ROOT / build_country_index.COUNTRY_INDEX_FILE
 COUNTRY_META_FILE = ROOT / build_country_index.COUNTRY_META_FILE
 CATALYST_ALL_FILE = ROOT / country_collect.CATALYST_ALL_FILE
-THREAT_FILE = ROOT / ai_threat.OUT_DIR / "latest.json"
-THREAT_REFRESH_SECONDS = 3600
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 LIVE_UPDATES = os.getenv("LIVE_UPDATES", "1") == "1"
 LIVE_INTERVAL_SECONDS = live.SLOT_MINUTES * 60
@@ -127,17 +122,9 @@ def _daily_refresh() -> None:
         build_country_index.main()
 
 
-def _threat_refresh() -> None:
-    """뉴스룸 RSS 수집 + 키워드 위협 평가. 1시간에 한 번만 (비용 없음, 대표 지수와 별개)."""
-    if time.time() - _mtime(THREAT_FILE) < THREAT_REFRESH_SECONDS:
-        return
-    newsroom.fetch()
-    ai_threat.run_live()
-
-
 def _updater() -> None:
     while True:
-        for job in (live.update, _daily_refresh, _threat_refresh):
+        for job in (live.update, _daily_refresh):
             try:
                 job()
             except Exception:  # 한 주기 실패가 스레드를 죽이지 않도록
@@ -328,15 +315,6 @@ def country_news(code: str, name: str = Query(..., min_length=1, max_length=40),
 def blend_weights() -> dict:
     """종합 점수 가중치와 추정 근거 (화면 설명용)."""
     return blend.load()
-
-
-@app.get("/api/threat")
-def threat() -> dict:
-    """뉴스룸 키워드 위협 신호 (실험, 대표 지수 미반영). 아직 없으면 빈 구조."""
-    if not THREAT_FILE.exists():
-        return {"date": None, "method": ai_threat.METHOD, "updated_at": None, "articles": 0, "signals": 0,
-                "signal_names": {}, "countries": []}
-    return json.loads(THREAT_FILE.read_text(encoding="utf-8"))
 
 
 @app.get("/api/live")
