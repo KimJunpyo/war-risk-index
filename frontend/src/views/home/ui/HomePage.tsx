@@ -16,6 +16,7 @@ import { NearbyShelters } from "@/widgets/nearby-shelters";
 import { NewsFeed } from "@/widgets/news-feed";
 import { PastCases } from "@/widgets/past-cases";
 import { RiskHistory } from "@/widgets/risk-history";
+import { SiteFooter } from "@/widgets/site-footer";
 import { WeeklyMovers } from "@/widgets/weekly-movers";
 import { WorldMap } from "@/widgets/world-map";
 
@@ -196,11 +197,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <footer className="mt-10 text-xs leading-relaxed text-neutral-600">
-        데이터: GDELT 일별 파일(일별 뉴스 집계·과거 추이), GDELT 15분 파일(15분 뉴스 집계·실시간 24시간),
-        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), 외교부(재외공관·영사콜센터), 행정안전부(민방위 대피시설), Google News(뉴스).
-        종합 = 두 뉴스 집계의 7일 점수를 흔들림이 작은 쪽에 더 무게를 둬 합친 값. 공식: FORMULA_v1.md.
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

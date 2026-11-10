@@ -10,7 +10,8 @@
   좌표 쿼리(lat=)는 coords.ts 에서만 만든다. shelter 엔티티·위젯은 localStorage·sessionStorage·document.cookie 를 쓰지 않는다.
   getCurrentPosition 시간 초과 10초. 고정 문구는 아래 상수 그대로.
 - 재외공관: frontend/src/widgets/embassy-contacts/ (index.ts), 전화는 tel: 링크.
-- HomePage 가 두 위젯을 쓰고, footer 데이터 출처에 외교부·행정안전부.
+- HomePage 가 두 위젯을 쓰고, 푸터 위젯(frontend/src/widgets/site-footer/) 데이터 출처에 외교부·행정안전부.
+  (이슈 #26: 푸터 위치 이동에 따른 검사 경로 변경. 예전에는 HomePage.tsx 의 footer)
 
 브라우저 수동: 로드 시 위치 팝업 없음(시크릿 창), Network 의 lat·lon 자릿수, 허용·거부 흐름, 시·도→시·군·구 선택,
 Application 탭 저장소·쿠키, available:false 시 DOM 없음, 키보드 조작, 외교부 맨 앞 표시·새 탭, KOR·국가 쌍 선택 시
@@ -34,6 +35,7 @@ SHELTER_ENTITY = SRC / "entities" / "shelter"
 COORDS = SHELTER_ENTITY / "model" / "coords.ts"
 SHELTER_WIDGET = SRC / "widgets" / "nearby-shelters"
 EMBASSY_WIDGET = SRC / "widgets" / "embassy-contacts"
+SITE_FOOTER = SRC / "widgets" / "site-footer"
 MOFA_LEVELS = ["여행유의", "여행자제", "출국권고", "여행금지"]
 FIND_NEARBY = "내 주변 대피소 찾기"
 FIND_BY_REGION = "지역으로 찾기"
@@ -118,4 +120,6 @@ def test_home_uses_widgets_and_footer_sources() -> None:
     code = _code(HOME)
     assert re.search(r"[\"']@/widgets/nearby-shelters[\"']", code)
     assert re.search(r"[\"']@/widgets/embassy-contacts[\"']", code)
-    assert "외교부" in code and "행정안전부" in code
+    # 푸터 위치 이동에 따른 검사 경로 변경(이슈 #26 할 일 3): 데이터 출처는 푸터 위젯에 있다
+    footer = _dir_code(SITE_FOOTER)
+    assert "외교부" in footer and "행정안전부" in footer

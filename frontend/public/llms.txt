@@ -6,6 +6,7 @@
 - 50점 = 평시, 100점 = 평시 대비 +2σ(상위 약 2%), 150점 = +4σ.
 - 종합 7일 점수: GDELT 일별 파일과 15분 파일의 7일 점수를 흔들림이 작은 쪽에 더 무게를 둬 합친 값. 하루 한 번 갱신.
 - 실시간 24시간 점수: GDELT 15분 파일 기준 최근 24시간. 15분마다 갱신.
+- 여행경보: 외교부, 미 국무부, 영국 FCDO (점수 미반영)
 
 ## 국가 상태 (UCDP GED, 약 1개월 지연)
 - 전쟁 중: 최근 12개월 국가 관련 교전 사망 1,000명 이상, 상대에 다른 나라 정부 포함.
@@ -21,6 +22,15 @@
 - 문구는 일반적인 비상 대비 권고를 참고한 자체 작성. 참고: 국민재난안전포털(행정안전부) https://www.safekorea.go.kr
 
 ## 출처
-- GDELT Project: https://www.gdeltproject.org/
-- UCDP (Uppsala Conflict Data Program): https://ucdp.uu.se/
-- 여행경보: 외교부, 미 국무부, 영국 FCDO (점수 미반영)
+- GDELT 1.0 일별 이벤트 파일: https://www.gdeltproject.org/
+- GDELT 2.0 15분 이벤트 파일: https://www.gdeltproject.org/
+- UCDP GED (웁살라 분쟁 데이터): https://ucdp.uu.se/
+- 미 국무부 여행경보: https://travel.state.gov/
+- 영국 FCDO 해외여행 안내: https://www.gov.uk/foreign-travel-advice
+- 외교부 국가·지역별 여행경보(공공데이터포털): https://www.data.go.kr/
+- 외교부 재외공관 정보(공공데이터포털): https://www.data.go.kr/
+- 외교부 영사콜센터: https://www.0404.go.kr/
+- 행정안전부 민방위 대피시설(공공데이터포털): https://www.data.go.kr/
+- Google News RSS: https://news.google.com/
+- 국민재난안전포털(행정안전부): https://www.safekorea.go.kr/
+- world-atlas: https://github.com/topojson/world-atlas
