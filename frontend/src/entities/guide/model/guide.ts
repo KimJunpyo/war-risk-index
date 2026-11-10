@@ -29,10 +29,13 @@ export function bandFor(score: number | null | undefined, status?: string | null
   return SCORE_BANDS[3];
 }
 
+/** 기관별 단계 이름. main 은 한 줄로 보이는 주 문구, sub 는 둘째 줄 작은 글씨 보조 문구 */
+export interface AdvisoryName { main: string; sub?: string }
+
 /** 여행경보 단계 설명 (백엔드 travel_advisory.py 와 일치) */
-export const ADVISORY_LEVELS: { level: number; kr: string; us: string; uk: string; meaning: string }[] = [
-  { level: 1, kr: "여행유의 (남색경보)", us: "일반적 주의 (Exercise Normal Precautions)", uk: "특별 권고 없음", meaning: "평소처럼 기본 안전수칙만 지키면 되는 수준" },
-  { level: 2, kr: "여행자제 (황색경보)", us: "각별한 주의 (Exercise Increased Caution)", uk: "일부 지역 여행 자제 권고", meaning: "범죄·테러·시위 등 위험이 높아 주의가 필요한 수준" },
-  { level: 3, kr: "출국권고 (적색경보)", us: "여행 재고 (Reconsider Travel)", uk: "전역 필수 외 여행 자제 권고", meaning: "꼭 필요한 경우가 아니면 가지 말 것을 권하는 수준" },
-  { level: 4, kr: "여행금지 (흑색경보)", us: "여행 금지 (Do Not Travel)", uk: "전역 모든 여행 자제 권고", meaning: "생명 위협이 커 방문하지 말고, 체류 중이면 떠날 것을 권하는 수준" },
+export const ADVISORY_LEVELS: { level: number; kr: AdvisoryName; us: AdvisoryName; uk: AdvisoryName; meaning: string }[] = [
+  { level: 1, kr: { main: "여행유의", sub: "남색경보" }, us: { main: "일반적 주의", sub: "Exercise Normal Precautions" }, uk: { main: "특별 권고 없음" }, meaning: "평소처럼 기본 안전수칙만 지키면 되는 수준" },
+  { level: 2, kr: { main: "여행자제", sub: "황색경보" }, us: { main: "각별한 주의", sub: "Exercise Increased Caution" }, uk: { main: "일부 지역 여행 자제 권고" }, meaning: "범죄·테러·시위 등 위험이 높아 주의가 필요한 수준" },
+  { level: 3, kr: { main: "출국권고", sub: "적색경보" }, us: { main: "여행 재고", sub: "Reconsider Travel" }, uk: { main: "전역 필수 외 여행 자제 권고" }, meaning: "꼭 필요한 경우가 아니면 가지 말 것을 권하는 수준" },
+  { level: 4, kr: { main: "여행금지", sub: "흑색경보" }, us: { main: "여행 금지", sub: "Do Not Travel" }, uk: { main: "전역 모든 여행 자제 권고" }, meaning: "생명 위협이 커 방문하지 말고, 체류 중이면 떠날 것을 권하는 수준" },
 ];
