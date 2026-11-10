@@ -16,10 +16,11 @@ export function LiveBadge() {
   const iso = slotToIso(data.as_of);
   const stale = now - Date.parse(iso) > STALE_MS;
   return (
-    <span className="inline-flex animate-fade-up items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-neutral-300">
+    <span className="inline-flex animate-fade-up items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-neutral-300">
       <span className={`h-2 w-2 rounded-full ${stale ? "bg-amber-400" : "animate-blink bg-red-500"}`} />
-      {stale ? "실시간 지연" : "LIVE"}
-      <span className="text-neutral-500">15분 갱신 · {timeAgo(iso, now)}</span>
+      {/* 좁은 폭(md 미만)에서는 헤더 한 줄에 들어가도록 점 + "LIVE"/"지연"만 보이고, 나머지 문구는 스크린리더에만 남김 */}
+      <span>{stale ? <><span className="max-md:sr-only">실시간 </span>지연</> : "LIVE"}</span>
+      <span className="text-neutral-500 max-md:sr-only">15분 갱신 · {timeAgo(iso, now)}</span>
     </span>
   );
 }

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { CHECKLIST_SOURCE, CHECKLIST_STORAGE_KEY, readChecked, toggleChecked } from "../model/checklist";
 import { bandFor } from "../model/guide";
 
-/** 선택한 나라·쌍의 점수 구간에 맞는 행동 권고 체크리스트 카드 (체크 상태는 브라우저에만 저장) */
-export function ActionGuide({ score, status, onMore }: {
+/** 선택한 나라·쌍의 점수 구간에 맞는 행동 권고 체크리스트 카드 (체크 상태는 브라우저에만 저장)
+ *  beside: lg 이상에서 다른 카드 옆에 반 폭으로 놓이면 true → 항목 1열 (화면 폭만으로는 옆 카드 유무를 알 수 없음) */
+export function ActionGuide({ score, status, onMore, beside = false }: {
   score: number | null | undefined;
   status?: string | null;
   onMore: () => void;
+  beside?: boolean;
 }) {
   const [checked, setChecked] = useState<string[]>([]);
 
@@ -39,7 +41,7 @@ export function ActionGuide({ score, status, onMore }: {
           단계별 가이드
         </button>
       </div>
-      <ul className="grid gap-x-6 gap-y-1 text-xs text-neutral-300 md:grid-cols-2">
+      <ul className={`grid gap-x-6 gap-y-1 text-xs text-neutral-300 md:grid-cols-2 ${beside ? "lg:grid-cols-1" : ""}`}>
         {band.items.map((it) => (
           <li key={it.id}>
             <label className="flex cursor-pointer items-start gap-2">
