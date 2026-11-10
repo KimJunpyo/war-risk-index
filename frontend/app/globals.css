@@ -5,6 +5,29 @@
   --background: #07090d;
   --foreground: #e5e7eb;
   color-scheme: dark;
+
+  /* 오버레이 스크롤바 thumb (트랙 없음) */
+  --scrollbar-thumb: rgb(255 255 255 / 0.22);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.4);
+  --scrollbar-size: 6px;
+  --scrollbar-size-hover: 8px;
+  --scrollbar-inset: 2px;
+}
+
+/* 고대비(강제 색) 모드: thumb는 forced-color-adjust: none 이라 시스템 색을 직접 지정 */
+@media (forced-colors: active) {
+  :root {
+    --scrollbar-thumb: CanvasText;
+    --scrollbar-thumb-hover: Highlight;
+  }
+}
+
+/* 네이티브 스크롤바 숨김(스크롤 기능은 유지). thumb는 shared/ui OverlayScrollbar 가 겹쳐 그림 */
+@utility no-native-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @theme inline {
@@ -12,6 +35,15 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* 브레이크포인트: 기본값을 지우고 기준 폭 768·1080·1440만 둠 */
+  --breakpoint-*: initial;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 67.5rem;
+  --breakpoint-xl: 90rem;
+
+  /* 페이지 컨테이너 최대 폭(max-w-page): border-box라 콘텐츠 80rem(1280px) + lg 좌우 패딩 2rem×2 */
+  --container-page: 84rem;
 
   /* 애니메이션: animate-fade-up, animate-draw, animate-ping-slow, animate-blink */
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;

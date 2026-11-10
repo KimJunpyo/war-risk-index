@@ -54,7 +54,7 @@ export function HomePage() {
   const korea = target?.kind === "country" ? target.code === DEFAULT_COUNTRY : !!target?.id.split("-").includes(DEFAULT_COUNTRY);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-page px-4 py-6 md:px-6 md:py-8 lg:px-8">
       <header className="mb-6 animate-fade-up">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-white">전쟁 가능성 지수</h1>

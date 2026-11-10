@@ -12,7 +12,7 @@ import {
   Opponents, STATUS_STYLE, StatusBadge, WATCH_CRITERIA, WATCH_REASONS, watchList, type Country,
 } from "@/entities/country";
 import { countryName, formatScore, iso2FromNumeric } from "@/shared/lib";
-import { Panel, SegmentedControl } from "@/shared/ui";
+import { Panel, ScrollArea, SegmentedControl } from "@/shared/ui";
 
 const W = 960;
 const H = 500;
@@ -321,27 +321,29 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
             <h3 className="text-xs font-semibold text-neutral-400">주목 국가</h3>
             <span className="text-[11px] text-neutral-600">{watch.length}개국</span>
           </div>
-          <ul className="max-h-[380px] space-y-0.5 overflow-y-auto pr-1">
-            {watch.map(({ country: c, reasons }, i) => (
-              <li key={c.code} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 15) * 30}ms` }}>
-                <button
-                  onClick={() => pick(c, true)}
-                  className={`w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5 ${c.code === selected ? "bg-white/10" : ""}`}
-                >
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="truncate text-neutral-200">{countryName(c.iso2, c.code)}</span>
-                    <span className="ml-auto tabular-nums text-neutral-300">{formatScore(METRIC_SCORE[metric](c))}</span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap gap-1">
-                    {reasons.map((r) => (
-                      <span key={r} className="rounded bg-white/5 px-1.5 text-[10px] text-neutral-400">{r}</span>
-                    ))}
-                  </div>
-                </button>
-              </li>
-            ))}
-            {watch.length === 0 && <li className="text-sm text-neutral-500">없음</li>}
-          </ul>
+          <ScrollArea viewportClassName="max-h-[380px] pr-1">
+            <ul className="space-y-0.5">
+              {watch.map(({ country: c, reasons }, i) => (
+                <li key={c.code} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 15) * 30}ms` }}>
+                  <button
+                    onClick={() => pick(c, true)}
+                    className={`w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5 ${c.code === selected ? "bg-white/10" : ""}`}
+                  >
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="truncate text-neutral-200">{countryName(c.iso2, c.code)}</span>
+                      <span className="ml-auto tabular-nums text-neutral-300">{formatScore(METRIC_SCORE[metric](c))}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {reasons.map((r) => (
+                        <span key={r} className="rounded bg-white/5 px-1.5 text-[10px] text-neutral-400">{r}</span>
+                      ))}
+                    </div>
+                  </button>
+                </li>
+              ))}
+              {watch.length === 0 && <li className="text-sm text-neutral-500">없음</li>}
+            </ul>
+          </ScrollArea>
           <details className="mt-2 text-[11px] text-neutral-500">
             <summary className="cursor-pointer select-none text-neutral-400">주목 국가 기준</summary>
             <ul className="mt-1 space-y-1">

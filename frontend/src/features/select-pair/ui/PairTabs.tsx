@@ -10,7 +10,7 @@ export function PairTabs({ pairs, selected, onSelect }: {
   onSelect: (id: string) => void;
 }) {
   return (
-    <div role="tablist" aria-label="국가 쌍 선택" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div role="tablist" aria-label="국가 쌍 선택" className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
       {pairs.map((p) => {
         const active = p.id === selected;
         const grade = p.latest?.grade ?? null;
