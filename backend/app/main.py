@@ -1,4 +1,5 @@
 """전쟁 가능성 지수 API. 프로젝트 루트에서 실행: uvicorn backend.app.main:app
+Windows에서는 --loop asyncio:SelectorEventLoop 를 붙인다(기본 Proactor 루프는 연결 수락 오류 시 서버 소켓을 닫아 이후 연결을 모두 거부).
 루트 .env 가 있으면 시작 시 읽는다(.env.example 참고, 이미 설정된 환경변수가 우선).
 
 시작하면 백그라운드 스레드가 15분마다 GDELT 2.0 실시간 슬롯을 갱신하고,
