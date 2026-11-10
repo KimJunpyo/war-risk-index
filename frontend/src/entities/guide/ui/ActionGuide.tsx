@@ -39,7 +39,7 @@ export function ActionGuide({ score, status, onMore }: {
           단계별 가이드
         </button>
       </div>
-      <ul className="grid gap-x-6 gap-y-1 text-xs text-neutral-300 sm:grid-cols-2">
+      <ul className="grid gap-x-6 gap-y-1 text-xs text-neutral-300 md:grid-cols-2">
         {band.items.map((it) => (
           <li key={it.id}>
             <label className="flex cursor-pointer items-start gap-2">

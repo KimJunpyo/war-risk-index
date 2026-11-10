@@ -12,7 +12,7 @@ export function WeeklyMovers({ countries, onSelect }: { countries: Country[]; on
 
   return (
     <Panel title="이번 주 변화" className="mt-8">
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         {up.length > 0 && <MoverList title="오른 나라" items={up} onSelect={onSelect} />}
         {down.length > 0 && <MoverList title="내린 나라" items={down} onSelect={onSelect} />}
       </div>
