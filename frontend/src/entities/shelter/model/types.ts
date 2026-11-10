@@ -13,6 +13,7 @@ export interface ShelterResult {
   available: boolean;
   as_of: string | null; // 원천 갱신일
   items: Shelter[];
+  total: number; // 안전 상한으로 자르기 전 건수(items 길이보다 클 수 있음)
 }
 
 /** GET /api/shelters/regions 응답 */

@@ -31,7 +31,7 @@
   어느 경우든 미·영은 정상 갱신.
 - GET /api/countries: 키 없으면 advisory 에서 kr_mofa 를 뺀다(CSV 에 남아 있어도). us_state·uk_fcdo 는 키 유무와 무관.
 
-[#11] 루트 shelters.py (신규)
+[#11] 루트 shelters.py (신규). 조회 상한·total·응답 압축은 #24(3-1)에서 변경
 - SHELTER_URL = "https://apis.data.go.kr/1741000/civil_defense_shelter_info/info", SHELTER_FILE = Path("data/shelters.csv"),
   PAGE_SIZE (≤100, 테스트가 바꿀 수 있게 update 안에서 모듈 상수를 읽는다)
 - haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float, self_check() -> None
@@ -41,12 +41,15 @@
     주소 = ROAD_NM_WHOL_ADDR, 비었으면 LCTN_WHOL_ADDR. 시·도는 옛 명칭만 현행 이름으로 정규화(강원도 → 강원특별자치도 등)하고
     그 밖에는 원천 표기를 따른다. 허용 목록 = 기존 17개 + "전남광주통합특별시"(2026-11-09 원천이 광주·전남 대부분을 이 이름으로 표기).
     시·군·구 = 주소 두 번째 낱말이 시·군·구로 끝날 때만, 아니면 없음(세종).
-- GET /api/shelters?lat=&lon=  → {"available": bool, "as_of": "YYYY-MM-DD" | null, "items": [...]}
-    소수점 3자리 이상이면 422. 위도 33~39·경도 124~132 밖이면 items []. 반경 5000m, 가까운 순 최대 10곳.
+- GET /api/shelters?lat=&lon=  → {"available": bool, "as_of": "YYYY-MM-DD" | null, "items": [...], "total": int}
+    소수점 3자리 이상이면 422. 위도 33~39·경도 124~132 밖이면 items [], total 0.
+    반경 5000m 안 전부, 가까운 순. 안전 상한 main.SHELTER_NEARBY_LIMIT = 1000(실데이터 5km 안 최대 약 600곳).
+    total = 상한 적용 전 건수(반경 안 전체). 반경 안에 없으면 0.
     item = {name, address, lat, lon, distance_m, capacity(int | null), kind(=FCLT_SE)}.
-    as_of = DAT_UPDT_PNT 최댓값의 날짜. 키가 없거나 파일이 없으면 available false, items [].
-- GET /api/shelters?region=<시·도>[ <시·군·구>] → 같은 모양, 해당 지역 최대 50곳, distance_m null.
-  lat·lon·region 모두 없으면 422.
+    as_of = DAT_UPDT_PNT 최댓값의 날짜. 키가 없거나 파일이 없으면 available false, items [], total 0.
+- GET /api/shelters?region=<시·도>[ <시·군·구>] → 같은 모양, 해당 지역 전부 이름순, distance_m null.
+  안전 상한 main.SHELTER_REGION_LIMIT = 1000, total = 상한 적용 전 지역 건수. lat·lon·region 모두 없으면 422.
+- main 은 GZipMiddleware(minimum_size = 상수)를 켠다. Accept-Encoding: gzip 요청 → Content-Encoding: gzip.
 - GET /api/shelters/regions → {"available": bool, "regions": [{"sido": str, "sigungu": [str, ...]}]}
 - 요청 좌표를 로그·파일에 쓰지 않는다.
 
@@ -83,9 +86,11 @@ TRAVEL_PATH = "/1262000/TravelAlarmService2/getTravelAlarmList2"
 EMBASSY_PATH = "/1262000/EmbassyService2/getEmbassyList2"
 SHELTER_PATH = "/1741000/civil_defense_shelter_info/info"
 SEOUL = {"lat": "37.57", "lon": "126.98"}
+JUNGGU = {"region": "서울특별시 중구"}
 RADIUS_M = 5000
-NEARBY_LIMIT = 10
-REGION_LIMIT = 50
+SAFETY_LIMIT = 1000  # main.SHELTER_NEARBY_LIMIT·SHELTER_REGION_LIMIT (위치·지역 안전 상한)
+OVER_CAP = SAFETY_LIMIT + 5  # 안전 상한이 실제로 걸리는 입력 수
+CAP_CENTER = {"lat": "37.59", "lon": "126.98"}  # _near_items(OVER_CAP) 줄(위도 37.5665~37.6167) 가운데, 전부 3km 안
 SIDO_17 = {
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시",
     "경기도", "강원특별자치도", "충청북도", "충청남도", "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도",
@@ -361,7 +366,7 @@ def test_mofa_exclusion_sentences_removed() -> None:
 # ---------- #11 민방위 대피시설 ----------
 
 def _near_items(n: int, base: dict, address: str) -> list[dict]:
-    """시청 부근 400m 안에 n 곳."""
+    """시청 부근에서 북쪽으로 약 5.6m(위도 0.00005°) 간격으로 n 곳."""
     return [{**base, "FCLT_NM": f"근처{i:02d}", "MNG_NO": f"G-{i:03d}", "LAT_EPSG4326": f"{37.5665 + i * 0.00005:.6f}",
              "ROAD_NM_WHOL_ADDR": f"{address} {i}"} for i in range(n)]
 
@@ -438,7 +443,7 @@ def test_nearby_seoul(client, shelter_data) -> None:
     assert [s["name"] for s in items] == ["시청 지하", "광화문 지하", "서울역 지하"]  # 잠실(약 11km)·제외 대상 빠짐
     assert all(set(s) >= SHELTER_FIELDS for s in items)
     dist = [s["distance_m"] for s in items]
-    assert dist == sorted(dist) and all(0 <= d <= RADIUS_M for d in dist)
+    assert dist == sorted(dist) and all(0 <= d <= RADIUS_M for d in dist)  # 입력이 이미 거리순이라 정렬 회귀는 test_nearby_limit·test_safety_cap 이 잡음
     by_name = {s["name"]: s for s in items}
     assert by_name["시청 지하"]["capacity"] == 1200 and by_name["광화문 지하"]["capacity"] is None
     assert by_name["시청 지하"]["kind"] == "공공용시설"
@@ -447,12 +452,17 @@ def test_nearby_seoul(client, shelter_data) -> None:
 
 
 def test_nearby_limit(client, portal, shelter_file) -> None:
+    """명세 변경(#24): 가까운 10곳 → 5km 안 전부."""
     import shelters
 
-    portal.routes[SHELTER_PATH] = _near_items(15, _items("shelter")[0], "서울특별시 중구 세종대로")
+    n = 15  # 옛 상한 10 보다 많게
+    portal.routes[SHELTER_PATH] = _near_items(n, _items("shelter")[0], "서울특별시 중구 세종대로")  # SEOUL 에서 먼 순
     shelters.update(force=True)
-    items = client.get("/api/shelters", params=SEOUL).json()["items"]
-    assert len(items) == NEARBY_LIMIT
+    body = client.get("/api/shelters", params=SEOUL).json()
+    dist = [s["distance_m"] for s in body["items"]]
+    assert len(dist) == n
+    assert body["total"] == n
+    assert dist == sorted(dist)
 
 
 @pytest.mark.parametrize("params", [{"lat": "37.5665", "lon": "126.98"}, {"lat": "37.57", "lon": "126.978"}])
@@ -509,15 +519,70 @@ def test_region_query(client, shelter_data, region, names) -> None:
     body = client.get("/api/shelters", params={"region": region}).json()
     assert body["available"] is True
     assert sorted(s["name"] for s in body["items"]) == names
+    assert body["total"] == len(names)  # 시·도 전체가 아니라 고른 시·군·구 건수
     assert all(set(s) >= SHELTER_FIELDS and s["distance_m"] is None for s in body["items"])
 
 
 def test_region_limit(client, portal, shelter_file) -> None:
+    """명세 변경(#24): 최대 50곳 → 지역 전부, 이름순."""
     import shelters
 
-    portal.routes[SHELTER_PATH] = _near_items(55, _items("shelter")[0], "서울특별시 중구 세종대로")
+    n = 55  # 옛 상한 50 보다 많게
+    portal.routes[SHELTER_PATH] = _near_items(n, _items("shelter")[0], "서울특별시 중구 세종대로")[::-1]  # 이름 역순 입력
     shelters.update(force=True)
-    assert len(client.get("/api/shelters", params={"region": "서울특별시 중구"}).json()["items"]) == REGION_LIMIT
+    body = client.get("/api/shelters", params=JUNGGU).json()
+    names = [s["name"] for s in body["items"]]
+    assert len(names) == n
+    assert body["total"] == n
+    assert names == sorted(names)
+
+
+@pytest.fixture
+def over_cap(portal, shelter_file):
+    """안전 상한보다 많은 시설. 모두 서울특별시 중구이고 CAP_CENTER 에서 3km 안."""
+    import shelters
+
+    portal.routes[SHELTER_PATH] = _near_items(OVER_CAP, _items("shelter")[0], "서울특별시 중구 세종대로")
+    assert shelters.update(force=True) is True
+    return shelter_file
+
+
+@pytest.mark.parametrize(("params", "key"), [(CAP_CENTER, "distance_m"), (JUNGGU, "name")], ids=["nearby", "region"])
+def test_safety_cap(client, portal, shelter_file, params, key) -> None:
+    import shelters
+
+    # 파일 순서를 거꾸로: 정렬 전에 앞 1000줄만 자르면 가까운(이름이 앞서는) 항목이 빠져 결과가 달라진다
+    rows = _near_items(OVER_CAP, _items("shelter")[0], "서울특별시 중구 세종대로")[::-1]
+    portal.routes[SHELTER_PATH] = rows
+    assert shelters.update(force=True) is True
+    body = client.get("/api/shelters", params=params).json()
+    got = [s[key] for s in body["items"]]
+    if key == "distance_m":
+        y, x = float(params["lat"]), float(params["lon"])
+        expected = sorted(round(shelters.haversine_m(y, x, float(r["LAT_EPSG4326"]), float(r["LOT_EPST4326"]))) for r in rows)
+    else:
+        expected = sorted(r["FCLT_NM"] for r in rows)
+    assert got == expected[:SAFETY_LIMIT]  # 가까운 순(이름순)으로 정렬한 뒤 앞에서 자름
+    assert body["total"] == OVER_CAP  # 상한 적용 전 건수
+
+
+@pytest.mark.parametrize(("params", "has_key"), [
+    ({"lat": "37.55", "lon": "127.06"}, True),  # 반경 밖: 잠실 지하(약 5.4km)가 사전 필터 사각형에만 듦
+    ({"lat": "10", "lon": "10"}, True),  # 한국 좌표 범위 밖
+    (SEOUL, False),  # 키 없음
+], ids=["outside_radius", "outside_korea", "no_key"])
+def test_total_zero_when_empty(client, shelter_data, monkeypatch, params, has_key) -> None:
+    if not has_key:
+        monkeypatch.delenv(KEY_ENV)
+    body = client.get("/api/shelters", params=params).json()
+    assert (body["available"], body["items"], body["total"]) == (has_key, [], 0)
+
+
+def test_gzip_response(client, over_cap) -> None:
+    # 1000곳 응답(약 160KB)이라 main 의 GZip minimum_size 상수보다 충분히 큼
+    res = client.get("/api/shelters", params=JUNGGU, headers={"Accept-Encoding": "gzip"})
+    assert res.status_code == 200
+    assert res.headers.get("content-encoding") == "gzip"
 
 
 def test_request_coords_not_logged(client, shelter_data, caplog) -> None:
