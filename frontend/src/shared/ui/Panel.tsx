@@ -8,7 +8,8 @@ export function Panel({ title, action, children, className = "" }: {
 }) {
   return (
     <section className={`animate-fade-up rounded-2xl border border-white/10 bg-white/[0.03] p-5 ${className}`}>
-      <header className="mb-4 flex items-center justify-between gap-3">
+      {/* 좁은 폭(md 미만)에서는 action 을 제목 아래 줄로 */}
+      <header className="mb-4 flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-300">{title}</h2>
         {action}
       </header>

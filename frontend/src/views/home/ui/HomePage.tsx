@@ -56,14 +56,16 @@ export function HomePage() {
   return (
     <main className="mx-auto w-full max-w-page px-4 py-6 md:px-6 md:py-8 lg:px-8">
       <header className="mb-6 animate-fade-up">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-white">전쟁 가능성 지수</h1>
+        <div className="flex items-center gap-2 md:gap-3">
+          <h1 className="shrink-0 text-xl font-bold tracking-tight text-white md:text-2xl">전쟁 가능성 지수</h1>
           <LiveBadge />
+          {/* 좁은 폭에서는 "가이드"만 보이고, 접근 가능한 이름은 모든 폭에서 같음 */}
           <button
             onClick={() => setGuideOpen(true)}
-            className="ml-auto rounded-full border border-white/15 px-3 py-1 text-xs text-neutral-300 transition hover:bg-white/10"
+            aria-label="가이드 · 여행경보 단계"
+            className="ml-auto shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs text-neutral-300 transition hover:bg-white/10"
           >
-            가이드 · 여행경보 단계
+            가이드<span className="hidden md:inline"> · 여행경보 단계</span>
           </button>
         </div>
         <p className="mt-1 text-sm text-neutral-400">

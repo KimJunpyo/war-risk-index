@@ -26,6 +26,10 @@ const LABEL_FONT = 10;
 const LABEL_CHAR_W = 9; // 한글 한 글자 폭(지도 좌표). 나라 폭에 이름이 들어가면 표시 → 확대할수록 작은 나라도 나타남
 const POINTER_R = { "전쟁 중": 4.5, "내전 중": 4, "무력 충돌": 3.5, "휴전·소강": 3, "잦은 국방 이슈": 3 } as const;
 const TOOLTIP_W = 220;
+// 지도 + 주목 국가 배치(plan.md 5-2). Tailwind 가 소스에서 클래스를 찾으므로 숫자는 클래스 문자열째 상수로 둔다
+const MAP_GRID = "lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_300px]"; // 오른쪽 목록 폭 lg 260px, xl 300px
+const WATCH_MAX_H = "max-h-[320px] lg:max-h-none"; // lg 미만 목록 최대 높이(lg 이상은 지도 높이에 맞춤)
+const CRITERIA_MAX_H = "lg:max-h-32"; // lg 이상 "주목 국가 기준" 최대 높이(128px). 펼쳐도 목록이 남고 영역 밖으로 안 넘침, lg 미만은 다 펼침
 // 나라 면에 빗금을 덧씌우는 상태 → SVG 패턴 id
 const HATCH_ID = { "전쟁 중": "war-hatch", "내전 중": "civil-hatch" } as const;
 const NO_DATA = "#1b2433";
@@ -208,7 +212,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
       title="세계 지도"
       action={<SegmentedControl label="지도 색 기준" value={metric} options={METRICS} onChange={setMetric} />}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className={`grid gap-4 ${MAP_GRID}`}>
         <div ref={boxRef} className="relative overflow-hidden rounded-xl bg-[#05080e] ring-1 ring-white/5">
           <svg
             ref={svgRef}
@@ -316,40 +320,47 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
           </div>
         </div>
 
-        <aside className="flex min-h-0 flex-col">
-          <div className="mb-2 flex items-baseline justify-between">
-            <h3 className="text-xs font-semibold text-neutral-400">주목 국가</h3>
-            <span className="text-[11px] text-neutral-600">{watch.length}개국</span>
+        {/* lg 이상: 안쪽을 absolute 로 띄워 목록이 행 높이에 영향을 주지 않게 → 행 높이 = 지도 높이 */}
+        <aside className="lg:relative">
+          <div className="flex flex-col lg:absolute lg:inset-0">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h3 className="text-xs font-semibold text-neutral-400">주목 국가</h3>
+              <span className="text-[11px] text-neutral-600">{watch.length}개국</span>
+            </div>
+            <ScrollArea className="lg:min-h-0 lg:flex-1" viewportClassName={`${WATCH_MAX_H} pr-1 lg:h-full`}>
+              {/* md~lg 미만에서 2열 */}
+              <ul className="grid gap-0.5 md:grid-cols-2 lg:grid-cols-1">
+                {watch.map(({ country: c, reasons }, i) => (
+                  <li key={c.code} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 15) * 30}ms` }}>
+                    <button
+                      onClick={() => pick(c, true)}
+                      className={`w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5 ${c.code === selected ? "bg-white/10" : ""}`}
+                    >
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="truncate text-neutral-200">{countryName(c.iso2, c.code)}</span>
+                        <span className="ml-auto tabular-nums text-neutral-300">{formatScore(METRIC_SCORE[metric](c))}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        {reasons.map((r) => (
+                          <span key={r} className="rounded bg-white/5 px-1.5 text-[10px] text-neutral-400">{r}</span>
+                        ))}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+                {watch.length === 0 && <li className="text-sm text-neutral-500">없음</li>}
+              </ul>
+            </ScrollArea>
+            <details className="mt-2 text-[11px] text-neutral-500">
+              <summary className="cursor-pointer select-none text-neutral-400">주목 국가 기준</summary>
+              {/* label: 안에 포커스 받을 요소가 없어 스크롤 영역이 Tab 포커스를 받아야 키보드로 스크롤됨 */}
+              <ScrollArea className="mt-1" viewportClassName={`${CRITERIA_MAX_H} lg:pr-1`} label="주목 국가 기준">
+                <ul className="space-y-1">
+                  {WATCH_REASONS.map((r) => <li key={r}><b className="text-neutral-300">{r}</b> · {WATCH_CRITERIA[r]}</li>)}
+                </ul>
+              </ScrollArea>
+            </details>
           </div>
-          <ScrollArea viewportClassName="max-h-[380px] pr-1">
-            <ul className="space-y-0.5">
-              {watch.map(({ country: c, reasons }, i) => (
-                <li key={c.code} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 15) * 30}ms` }}>
-                  <button
-                    onClick={() => pick(c, true)}
-                    className={`w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5 ${c.code === selected ? "bg-white/10" : ""}`}
-                  >
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="truncate text-neutral-200">{countryName(c.iso2, c.code)}</span>
-                      <span className="ml-auto tabular-nums text-neutral-300">{formatScore(METRIC_SCORE[metric](c))}</span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap gap-1">
-                      {reasons.map((r) => (
-                        <span key={r} className="rounded bg-white/5 px-1.5 text-[10px] text-neutral-400">{r}</span>
-                      ))}
-                    </div>
-                  </button>
-                </li>
-              ))}
-              {watch.length === 0 && <li className="text-sm text-neutral-500">없음</li>}
-            </ul>
-          </ScrollArea>
-          <details className="mt-2 text-[11px] text-neutral-500">
-            <summary className="cursor-pointer select-none text-neutral-400">주목 국가 기준</summary>
-            <ul className="mt-1 space-y-1">
-              {WATCH_REASONS.map((r) => <li key={r}><b className="text-neutral-300">{r}</b> · {WATCH_CRITERIA[r]}</li>)}
-            </ul>
-          </details>
         </aside>
       </div>
 

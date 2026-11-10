@@ -10,7 +10,7 @@ export function PairTabs({ pairs, selected, onSelect }: {
   onSelect: (id: string) => void;
 }) {
   return (
-    <div role="tablist" aria-label="국가 쌍 선택" className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+    <div role="tablist" aria-label="국가 쌍 선택" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
       {pairs.map((p) => {
         const active = p.id === selected;
         const grade = p.latest?.grade ?? null;
@@ -28,7 +28,8 @@ export function PairTabs({ pairs, selected, onSelect }: {
               <span className="min-w-0 font-medium leading-snug text-neutral-100">{p.name}</span>
               <GradeBadge grade={grade} />
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
+            {/* 좁은 폭(md 미만)에서는 보조 문구를 큰 점수 아래 줄로 */}
+            <div className="mt-2 flex flex-col md:flex-row md:items-baseline md:gap-2">
               <AnimatedNumber
                 value={p.latest?.blended ?? p.latest?.weekly}
                 className={`text-3xl font-semibold tabular-nums ${grade ? GRADE_STYLE[grade].text : "text-neutral-400"}`}
