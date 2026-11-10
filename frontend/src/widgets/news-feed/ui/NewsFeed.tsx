@@ -6,6 +6,9 @@ import { NewsRangeToggle } from "@/features/select-news-range";
 import { titleMentions } from "@/shared/lib";
 import { Panel, ScrollArea, StatusText } from "@/shared/ui";
 
+// 목록 최대 높이: 기본 480px, md 560px, lg 이상 720px(오른쪽 열에서 두 행을 차지)
+const LIST_MAX_H = "max-h-[480px] md:max-h-[560px] lg:max-h-[720px]";
+
 /** newsPath: 국가 쌍(/api/pairs/{id}/news) 또는 국가(/api/countries/{code}/news?name=…)
  *  keywords: 제목(언론사명 제외)에 하나라도 있어야 보여줄 나라 이름들 */
 export function NewsFeed({ newsPath, keywords }: { newsPath: string; keywords: string[] }) {
@@ -32,7 +35,7 @@ export function NewsFeed({ newsPath, keywords }: { newsPath: string; keywords: s
     >
       <StatusText loading={loading} />
       {!loading && (
-        <ScrollArea className="-mx-2" viewportClassName="max-h-[720px]">
+        <ScrollArea className="-mx-2" viewportClassName={LIST_MAX_H}>
           <ul>
             {shown.map((n) => <NewsCard key={n.url} item={n} />)}
           </ul>

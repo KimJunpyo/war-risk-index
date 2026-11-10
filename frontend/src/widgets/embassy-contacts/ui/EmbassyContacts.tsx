@@ -23,7 +23,8 @@ export function EmbassyContacts({ code }: { code: string }) {
       </p>
       {data?.available && data.embassies.length > 0 && (
         <>
-          <ul className="mt-2 space-y-1.5">
+          {/* md~lg 미만은 전체 폭이라 2열, lg 이상은 체크리스트 옆 반 폭이라 1열 */}
+          <ul className="mt-2 grid gap-x-6 gap-y-1.5 md:grid-cols-2 lg:grid-cols-1">
             {data.embassies.map((e, i) => (
               <li key={`${e.name}-${i}`}>
                 <span className="text-neutral-200">{e.name}</span>
