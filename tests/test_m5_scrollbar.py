@@ -46,6 +46,7 @@ BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 LINE_COMMENT = re.compile(r"(?<![:\"'`])//.*")
 
 # 이슈 #20 착수 전(2026-11-10) frontend/package.json 스냅샷
+# + PR #28에서 사용자 승인으로 추가한 @playwright/test(Firefox·WebKit 교차 브라우저 검사)
 DEPENDENCIES = {
     "d3-geo": "^3.1.2",
     "d3-selection": "^3.0.1",
@@ -57,6 +58,7 @@ DEPENDENCIES = {
     "world-atlas": "^2.0.2",
 }
 DEV_DEPENDENCIES = {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "^4",
     "@types/d3-geo": "^3.1.1",
     "@types/d3-selection": "^3.0.12",
