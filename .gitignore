@@ -10,6 +10,7 @@ out/
 # 비밀값
 .env
 .env.*
+!.env.example
 
 # 로컬 도구 설정
 .claude/settings.local.json

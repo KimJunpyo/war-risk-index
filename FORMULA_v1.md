@@ -145,6 +145,7 @@ z    = (log(현재 비중) - 기준선 log 평균) / 기준선 log 표준편차
 구현: `travel_advisory.py` → `data/travel_advisory.csv` (iso3, source, level, label, date, summary, url). 백엔드가 하루 1회 받는다.
 
 - **정의:** 정부가 자국민에게 내는 공식 위협 판단. 국가별·출처별 단계와 발표(갱신)일을 그대로 보여준다.
+  - 외교부 (`kr_mofa`): 공식 1~4단계 (1 여행유의 · 2 여행자제 · 3 출국권고 · 4 여행금지). 출처 공공데이터포털 외교부 국가·지역별 여행경보 https://apis.data.go.kr/1262000/TravelAlarmService2/getTravelAlarmList2 (`DATA_GO_KR_SERVICE_KEY` 필요, 없으면 건너뛰고 화면에서도 숨김). 특별여행주의보는 이 API에 없어 넣지 않았다.
   - 미 국무부 (`us_state`): 공식 1~4단계 (1 일반 주의 · 2 주의 강화 · 3 여행 재고 · 4 여행 금지). 출처 https://cadataapi.state.gov/api/TravelAdvisories
   - 영국 FCDO (`uk_fcdo`): 공식 숫자 단계가 없어 `alert_status`를 **자체 환산**한다. 전역 모든 여행 자제 4 · 전역 필수 외 자제 3 · 일부 지역 자제 2 · 없음 1. 출처 https://www.gov.uk/api/content/foreign-travel-advice/{국가}
   - 한 나라에 여러 지역 경보가 있으면(예: 가자 4·서안 3 → PSE) 가장 높은 단계 하나만 쓴다.
@@ -156,7 +157,7 @@ z    = (log(현재 비중) - 기준선 log 평균) / 기준선 log 표준편차
 2. 전쟁 위험만이 아니라 범죄·테러·납치·부당 구금·보건도 섞인 판단이라, 전쟁 가능성과 1:1이 아니다(예: 북한 4단계는 구금 위험이 주 사유).
 3. 각국의 외교 관계·자국민 보호 기준이 반영된다. 같은 나라도 출처마다 단계가 다르다(우크라이나: 미 4 · 영 2).
 4. FCDO 단계는 이 프로젝트의 환산값이라 미 국무부 단계와 같은 척도가 아니다.
-5. 한국 외교부 여행경보는 공공데이터포털 serviceKey가 필요해 아직 넣지 않았다.
+5. 외교부 경보는 공공데이터포털 키가 있을 때만 받는다. 키가 없으면 미 국무부·영국 FCDO만 보인다.
 
 ## 알려진 한계
 

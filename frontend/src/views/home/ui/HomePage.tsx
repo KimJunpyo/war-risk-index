@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Opponents, StatusBadge, useCountries, type Advisory, type Country } from "@/entities/country";
+import { MOFA_PARTIAL, Opponents, StatusBadge, useCountries, type Advisory, type Country } from "@/entities/country";
 import { ActionGuide, FAQ } from "@/entities/guide";
 import { LiveBadge } from "@/entities/live";
 import { GradeBadge, usePairs, type Pair } from "@/entities/pair";
@@ -10,7 +10,9 @@ import { PairTabs } from "@/features/select-pair";
 import { countryName, formatScore, GRADE_STYLE, newsKeywords, type Grade, type LiveScore } from "@/shared/lib";
 import { AnimatedNumber, StatusText } from "@/shared/ui";
 import { CatalystPanel } from "@/widgets/catalyst-panel";
+import { EmbassyContacts } from "@/widgets/embassy-contacts";
 import { GuideModal } from "@/widgets/guide-modal";
+import { NearbyShelters } from "@/widgets/nearby-shelters";
 import { NewsFeed } from "@/widgets/news-feed";
 import { PastCases } from "@/widgets/past-cases";
 import { RiskHistory } from "@/widgets/risk-history";
@@ -48,6 +50,8 @@ export function HomePage() {
   const target = picked ?? defaultTarget(countries.data, pairs.data);
   const summary = target && summarize(target, pairs.data ?? [], countries.data ?? []);
   const weights = useBlendWeights().data;
+  // 한국 또는 한국이 낀 국가 쌍 (국내 대피소 표시 조건)
+  const korea = target?.kind === "country" ? target.code === DEFAULT_COUNTRY : !!target?.id.split("-").includes(DEFAULT_COUNTRY);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -129,15 +133,21 @@ export function HomePage() {
             </p>
             {summary.advisory.length > 0 && (
               <p className="w-full text-[11px] text-neutral-500">
-                여행경보(점수 미반영){summary.advisory.map((a) => (
+                여행경보(점수 미반영){[...summary.advisory].sort((a, b) => Number(b.source === "kr_mofa") - Number(a.source === "kr_mofa")).map((a) => ( // 외교부 맨 앞
                   <span key={a.source}> · {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">{a.name}</a> : a.name}{" "}
                     <b className={a.level >= a.max_level ? "text-rose-300" : "text-neutral-300"}>{a.level}/{a.max_level}단계</b>
-                    {" "}({a.label}, {a.date ?? "날짜 없음"})</span>
+                    {" "}({a.label}{a.source === "kr_mofa" && a.summary?.startsWith(MOFA_PARTIAL) && ` · ${MOFA_PARTIAL}`}
+                    {/* 외교부는 발표일이 오지 않아 빈 날짜를 표시하지 않음 */}
+                    {a.date ? `, ${a.date}` : a.source === "kr_mofa" ? "" : ", 날짜 없음"})</span>
                 ))}
                 {" "}<button onClick={() => setGuideOpen(true)} className="underline decoration-neutral-700 hover:text-neutral-300">단계 설명</button>
               </p>
             )}
             <ActionGuide score={summary.blended ?? summary.daily7} status={summary.status} onMore={() => setGuideOpen(true)} />
+            {/* 국내 대피소: 한국 또는 한국이 낀 국가 쌍일 때 체크리스트 아래 */}
+            {korea && <NearbyShelters />}
+            {/* 해외 나라만 (한국·국가 쌍에서는 DOM 없음) */}
+            {summary.country && summary.country.code !== DEFAULT_COUNTRY && <EmbassyContacts code={summary.country.code} />}
           </div>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <RiskHistory basePath={summary.basePath} />
@@ -168,7 +178,7 @@ export function HomePage() {
 
       <footer className="mt-10 text-xs leading-relaxed text-neutral-600">
         데이터: GDELT 일별 파일(일별 뉴스 집계·과거 추이), GDELT 15분 파일(15분 뉴스 집계·실시간 24시간),
-        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 미 국무부·영국 FCDO(여행경보), Google News(뉴스).
+        UCDP GED(전쟁·내전·무력 충돌 판정, 약 1개월 지연), 외교부·미 국무부·영국 FCDO(여행경보), 외교부(재외공관·영사콜센터), 행정안전부(민방위 대피시설), Google News(뉴스).
         종합 = 두 뉴스 집계의 7일 점수를 흔들림이 작은 쪽에 더 무게를 둬 합친 값. 공식: FORMULA_v1.md.
       </footer>
     </main>

@@ -1,9 +1,8 @@
 """정부 여행경보 → 국가(ISO alpha-3)별 단계·발표일·사유 요약.
 
-키 없이 받을 수 있는 공식 출처만 쓴다.
+- 한국 외교부 국가·지역별 여행경보 (공공데이터포털, 1~4단계 공식 단계). serviceKey 가 없으면 건너뛴다.
 - 미 국무부 Travel Advisories JSON (1~4단계, 공식 단계)
 - 영국 FCDO 해외여행 안내 (GOV.UK Content API). 공식 숫자 단계가 없어 alert_status 를 1~4로 환산한다.
-한국 외교부 여행경보(공공데이터포털)는 serviceKey 가 필요해 제외했다.
 점수 공식에는 넣지 않는 별도 신호다(과거 이력이 없어 검증 불가).
 """
 
@@ -18,18 +17,23 @@ from pathlib import Path
 import pandas as pd
 import pycountry
 
+import data_go_kr
 import ucdp
 
 ADVISORY_FILE = Path("data/travel_advisory.csv")
 US_URL = "https://cadataapi.state.gov/api/TravelAdvisories"
 UK_INDEX_URL = "https://www.gov.uk/api/content/foreign-travel-advice"
+MOFA_URL = "https://apis.data.go.kr/1262000/TravelAlarmService2/getTravelAlarmList2"
+MOFA_LINK = "https://www.0404.go.kr/"  # 해외안전여행 (응답에 국가별 페이지 주소가 없음)
+MOFA_PAGE_SIZE = 100
+MOFA_PARTIAL = "일부 지역"  # region_ty "일부" 경보는 summary 앞에 붙여 전역 경보로 오해되지 않게
 USER_AGENT = "war-risk-index/0.1"  # 기본 urllib UA 는 Cloudflare 에 막힐 수 있음
 TIMEOUT_SECONDS = 60
 REFRESH_SECONDS = 20 * 3600  # 파일이 이보다 새로우면 다시 받지 않음(하루 1회)
 UK_WORKERS = 3  # GOV.UK Content API 한도 초당 10회 아래로
 SUMMARY_MAX = 200
 COLUMNS = ["iso3", "source", "level", "label", "date", "summary", "url"]
-SOURCES = {"us_state": "미 국무부", "uk_fcdo": "영국 FCDO"}
+SOURCES = {"kr_mofa": "외교부", "us_state": "미 국무부", "uk_fcdo": "영국 FCDO"}
 MAX_LEVEL = 4
 
 # 미 국무부 링크의 자체 코드(destination.xxx.html) 중 ISO 가 아닌 것
@@ -49,6 +53,10 @@ NAME_TO_ISO = {
     "Bonaire/St Eustatius/Saba": "BES", "St Martin and St Barthélemy": "MAF",
     "Cook Islands, Tokelau and Niue": "COK", "Antarctica/British Antarctic Territory": "ATA",
 }
+# 외교부 공식 4단계 (특별여행주의보는 이 API 에 없음)
+MOFA_LEVEL_LABEL = {1: "여행유의", 2: "여행자제", 3: "출국권고", 4: "여행금지"}
+# 외교부 국가 코드 중 ISO 3166 에 없는 것 (코소보 XK 는 사용자 지정 코드)
+MOFA_ISO2_TO_ISO3 = {"XK": "XKX"}
 # FCDO alert_status → 1~4 (자체 환산: 전역 전면 금지 4, 전역 필수 외 금지 3, 일부 지역 금지 2, 없음 1)
 UK_STATUS_LEVEL = {
     "avoid_all_travel_to_whole_country": 4, "avoid_all_but_essential_travel_to_whole_country": 3,
@@ -116,6 +124,37 @@ def parse_uk(doc: dict) -> dict | None:
             "url": "https://www.gov.uk" + doc.get("base_path", ""), "name": name}
 
 
+def parse_mofa(items: list[dict]) -> tuple[list[dict], list[str]]:
+    """외교부 응답 item(국가·지역별 1건) → 행. 같은 나라 여러 행은 dedupe() 가 최고 단계로 줄인다."""
+    rows, failed = [], []
+    for x in items:
+        a2 = (x.get("country_iso_alp2") or "").strip().upper()
+        c = pycountry.countries.get(alpha_2=a2)
+        iso3 = MOFA_ISO2_TO_ISO3.get(a2) or (c.alpha_3 if c else None)
+        level = int(x["alarm_lvl"]) if str(x.get("alarm_lvl") or "").strip() in {"1", "2", "3", "4"} else None
+        if not (iso3 and level):
+            failed.append(x.get("country_nm"))
+            continue
+        rows.append({"iso3": iso3, "source": "kr_mofa", "level": level, "label": MOFA_LEVEL_LABEL[level],
+                     "date": (x.get("written_dt") or "")[:10] or None,
+                     "summary": _mofa_summary(x), "url": MOFA_LINK})
+    return rows, failed
+
+
+def _mofa_summary(x: dict) -> str:
+    remark = (x.get("remark") or "").strip()
+    if (x.get("region_ty") or "").strip() == "일부":
+        remark = f"{MOFA_PARTIAL}: {remark}" if remark else MOFA_PARTIAL
+    return remark[:SUMMARY_MAX]
+
+
+def fetch_mofa() -> tuple[list[dict], list[str]]:
+    rows, failed = parse_mofa(data_go_kr.fetch_all(MOFA_URL, MOFA_PAGE_SIZE))
+    if not rows:  # 정상 응답 0건도 실패로 보고 직전 값 유지
+        raise RuntimeError("외교부 여행경보 0건")
+    return rows, failed
+
+
 def fetch_us() -> tuple[list[dict], list[str]]:
     return parse_us(_get_json(US_URL))
 
@@ -150,12 +189,16 @@ def load() -> pd.DataFrame:
 
 
 def update(force: bool = False) -> bool:
-    """하루 1회 받아 저장. 출처 하나가 실패하면 그 출처는 직전 값을 유지. 갱신했으면 True."""
+    """하루 1회 받아 저장. 출처 하나가 실패하면 그 출처는 직전 값을 유지. 갱신했으면 True.
+    외교부는 키가 없으면 직전 값까지 버린다(키를 지운 뒤 옛 값이 남지 않도록)."""
     if not force and ADVISORY_FILE.exists() and time.time() - ADVISORY_FILE.stat().st_mtime < REFRESH_SECONDS:
         return False
     old = load()
     frames = []
-    for source, fetch in (("us_state", fetch_us), ("uk_fcdo", fetch_uk)):
+    for source, fetch in (("us_state", fetch_us), ("uk_fcdo", fetch_uk), ("kr_mofa", fetch_mofa)):
+        if source == "kr_mofa" and not data_go_kr.service_key():
+            print(f"여행경보 {SOURCES[source]}: {data_go_kr.KEY_ENV} 없음, 건너뜀")
+            continue
         try:
             rows, failed = fetch()
             frames.append(pd.DataFrame(rows, columns=COLUMNS))
@@ -204,6 +247,14 @@ def self_check() -> None:
                                  "alert_status": ["avoid_all_travel_to_whole_country"]}})["level"] == 4
     assert parse_uk({"details": {"country": {"name": "France"}}})["level"] == 1
     assert by_iso3(d)["IRN"][0]["name"] == "미 국무부"
+    mofa, failed = parse_mofa([
+        {"alarm_lvl": "1", "country_iso_alp2": "TH", "country_nm": "태국", "remark": "방콕", "written_dt": "2026-08-01"},
+        {"alarm_lvl": "3", "country_iso_alp2": "TH", "country_nm": "태국", "remark": "남부", "written_dt": None,
+         "region_ty": "일부"},
+        {"alarm_lvl": "2", "country_iso_alp2": "ZZ", "country_nm": "가상국"}])
+    assert failed == ["가상국"] and mofa[1]["date"] is None and mofa[1]["label"] == "출국권고"
+    assert mofa[1]["summary"] == "일부 지역: 남부" and mofa[0]["summary"] == "방콕"
+    assert dedupe(pd.DataFrame(mofa, columns=COLUMNS))["level"].tolist() == [3]  # 여러 지역 → 최고 단계
     print("travel_advisory self_check OK")
 
 
