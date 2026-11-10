@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NewsCard, useNews, type NewsItem, type NewsRange } from "@/entities/news";
 import { NewsRangeToggle } from "@/features/select-news-range";
 import { titleMentions } from "@/shared/lib";
-import { Panel, StatusText } from "@/shared/ui";
+import { Panel, ScrollArea, StatusText } from "@/shared/ui";
 
 /** newsPath: 국가 쌍(/api/pairs/{id}/news) 또는 국가(/api/countries/{code}/news?name=…)
  *  keywords: 제목(언론사명 제외)에 하나라도 있어야 보여줄 나라 이름들 */
@@ -32,9 +32,11 @@ export function NewsFeed({ newsPath, keywords }: { newsPath: string; keywords: s
     >
       <StatusText loading={loading} />
       {!loading && (
-        <ul className="-mx-2 max-h-[720px] overflow-y-auto">
-          {shown.map((n) => <NewsCard key={n.url} item={n} />)}
-        </ul>
+        <ScrollArea className="-mx-2" viewportClassName="max-h-[720px]">
+          <ul>
+            {shown.map((n) => <NewsCard key={n.url} item={n} />)}
+          </ul>
+        </ScrollArea>
       )}
     </Panel>
   );

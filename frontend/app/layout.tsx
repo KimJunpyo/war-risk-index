@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { SITE_URL } from "@/shared/config/env";
+import { PageScrollbar } from "@/shared/ui";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -35,9 +36,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} no-native-scrollbar h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <PageScrollbar />
+      </body>
     </html>
   );
 }
