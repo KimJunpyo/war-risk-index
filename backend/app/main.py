@@ -14,6 +14,7 @@ import time
 import urllib.parse
 import urllib.request
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import dotenv
@@ -21,6 +22,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
 import blend
 import build_country_index
@@ -54,6 +56,8 @@ GZIP_MINIMUM_SIZE = 1000  # 이 바이트보다 작은 응답은 압축하지 �
 LIVE_UPDATES = os.getenv("LIVE_UPDATES", "1") == "1"
 LIVE_INTERVAL_SECONDS = live.SLOT_MINUTES * 60
 COLLECTOR_IDLE_SECONDS = 600  # 이 시간 안에 수집 파일이 바뀌었으면 수동 수집 중으로 보고 일별 갱신을 미룸
+LIVE_STALE_MINUTES = 60  # /api/health: 최신 실시간 슬롯이 이 분을 넘게 지났으면 503
+INDEX_STALE_DAYS = 3  # /api/health: 일별 지수 최신 날짜가 이 일수를 넘게 지났으면 503
 COUNTRY_NEWS_QUERY = "{name} (군사 OR 국방 OR 분쟁 OR 공격 OR 미사일)"
 # 대피소 조회: 좌표는 소수점 2자리(약 1km)까지만 받음(정밀 위치를 받지 않도록)
 COORD_PATTERN = r"^-?\d{1,3}(\.\d{1,2})?$"
@@ -498,5 +502,40 @@ def country_embassies(code: str) -> dict:
     out["embassies"] = [{k: r[k] or None for k in ("name", "kind", "address", "tel", "emergency_tel")}
                         for r in rows.to_dict("records")]
     return out
+
+
+# ---------- 데이터 신선도 헬스 체크 (외부 가동 감시용) ----------
+
+def _utcnow() -> datetime:
+    """현재 UTC 시각(시간대 있음). 테스트가 현재 시각을 바꿔 끼우는 유일한 지점."""
+    return datetime.now(timezone.utc)
+
+
+def _max_or_none(df: pd.DataFrame, column: str) -> str | None:
+    """열의 최댓값. 파일이 없거나(열 없음) 행·값이 없으면 None."""
+    value = df[column].max() if column in df else None
+    return None if pd.isna(value) else value
+
+
+@app.get("/api/health")
+@app.head("/api/health")  # HEAD 로 확인하는 감시 서비스용(GET 만 등록하면 405). api_route 는 두 메서드에 같은 operationId 를 붙임
+def health() -> JSONResponse:
+    """최신 실시간 슬롯이 LIVE_STALE_MINUTES 분, 일별 지수 날짜가 INDEX_STALE_DAYS 일 이내면 200, 아니면 503.
+    파일·값이 없으면 그 파일의 두 필드는 null 이고 503. LIVE_UPDATES=0 이어도 같은 기준이다."""
+    now = _utcnow()
+    live_as_of = _max_or_none(_csv(ROOT / live.COUNTRY_LIVE, dtype={"key": str}), "key")  # = /api/live 의 as_of
+    index_date = _max_or_none(_meta(), "date")
+    live_age = index_age = None
+    if live_as_of is not None:  # 슬롯 key 는 UTC 시각
+        slot = datetime.strptime(live_as_of, live.KEY_FORMAT).replace(tzinfo=timezone.utc)
+        live_age = (now - slot) // timedelta(minutes=1)  # 분 단위 내림. 판정도 이 정수로 함
+    if index_date is not None:  # 하루 중 시각과 무관한 UTC 달력 날짜 차
+        index_age = (now.date() - date.fromisoformat(index_date)).days
+    # GDELT 슬롯 key 는 실제 발행 시각보다 약 10분 뒤라 갱신 직후 나이가 음수일 수 있고 정상이다. 하한 검사를 두지 않는다
+    ok = (live_age is not None and index_age is not None
+          and live_age <= LIVE_STALE_MINUTES and index_age <= INDEX_STALE_DAYS)
+    return JSONResponse({"ok": ok, "live_as_of": live_as_of, "live_age_minutes": live_age,
+                         "index_date": index_date, "index_age_days": index_age}, status_code=200 if ok else 503)
+
 
 assert set(RANGES) == {"24h", "7d"}  # news 쿼리 패턴과 동기화
