@@ -36,12 +36,13 @@ importlib.metadata 로 본다. import 검사는 LIVE_UPDATES=0 인 별도 파이
 [런타임 import] 서버 venv 에는 런타임 목록과 그 의존성만 깔린다. 그 밖의 모듈을 부르면 백엔드가 ImportError 로 죽는다.
 - 런타임 폐포(closure): 런타임 목록 6개에서 importlib.metadata.requires() 를 따라간 배포판들.
     extras 를 따라가고(uvicorn 은 standard), 환경 마커는 이 venv(지금 Windows·Python 3.12)에서 packaging 으로 평가한다.
-- LIVE_UPDATES=0 인 별도 프로세스에서 backend.app.main, gpr_backtest 를 각각 import 한 뒤 sys.modules 의 최상위 모듈이
+- LIVE_UPDATES=0 인 별도 프로세스에서 backend.app.main, gpr_backtest 를 각각 import 할 때 새로 불린 최상위 모듈이
     (1) dev 전용 4개가 아니다(인수 조건은 matplotlib).
     (2) 표준 라이브러리·저장소 모듈이 아니면 그 배포판이 런타임 폐포 안이다.
         배포판은 모듈 파일이 있는 site-packages 바로 아래 이름으로 packages_distributions() 에서 찾는다.
         그래서 pandas/_libs 의 _cyutility 처럼 최상위 이름으로 등록되는 하위 파일도 pandas 로 본다.
-        파일이 없는 합성 모듈(cython_runtime·_cython_3_x·__main__)은 뺀다.
+        파일이 없는 합성 모듈(cython_runtime·_cython_3_x)은 뺀다.
+    인터프리터 시작 때 이미 불린 모듈(sitecustomize, .pth·coverage·디버거가 부른 것 등)은 코드가 부른 것이 아니라 대상이 아니다.
 - 함수 안 import(늦은 import)는 AST 로 본다. 대상은 backend.app.main import 에서 불린 저장소 모듈 파일이다
     (backend 패키지는 폴더 안 *.py 전부). 함수 안 import 가 부르는 최상위 모듈은 다음 중 하나여야 한다.
     표준 라이브러리, 그 import 에서 이미 불린 저장소 모듈, 배포판이 런타임 폐포 안인 모듈, 허용 목록.
@@ -56,6 +57,7 @@ importlib.metadata 로 본다. import 검사는 LIVE_UPDATES=0 인 별도 파이
 - 못 잡는 것: 마커를 이 venv 에서 평가하므로 Linux 에서만 깔리는 의존성(uvloop 등)과 그 import 는 보지 않는다.
     라이브러리 안의 늦은 import(pd.read_excel 이 부르는 xlrd 등), 문자열로 부르는 import(importlib.import_module)도 못 잡는다.
     런타임 의존성이 dev venv 에 있으면 쓰는 선택 의존성을 import 하면 폐포 밖이라 실패한다(서버에서는 괜찮을 수 있음).
+    시작 때 이미 불린 패키지는 코드가 다시 import 해도 새로 불리지 않아 못 본다(예: sitecustomize 가 matplotlib 을 부르는 환경).
 - 구현 전(be74cf1)에는 다음이 실패했다(테스트 자체 오류 아님).
     test_line_format[requirements.txt](pandas·numpy·matplotlib·xlrd 버전 없음),
     test_runtime_packages·test_runtime_excludes_dev_only(matplotlib·xlrd 있음), test_dev_packages(matplotlib·xlrd 없음),
@@ -124,15 +126,17 @@ MAIN_MODULE = "backend.app.main"  # 서버 진입점(uvicorn backend.app.main:ap
 RUNTIME_IMPORTS = [MAIN_MODULE, "gpr_backtest"]  # 서버 진입점, matplotlib import 를 옮긴 모듈
 SITE_DIRS = sorted({Path(sysconfig.get_path(key)) for key in ("purelib", "platlib")})  # 이 venv 의 site-packages
 SUBPROCESS_TIMEOUT = 120  # 초. test_m4_env 와 같은 값(pandas·fastapi import 포함)
-# 별도 파이썬에서 module 을 import 한 뒤, 표준 라이브러리가 아닌 최상위 모듈 → 파일을 JSON 으로 출력한다.
+# 별도 파이썬에서 module 을 import 할 때 새로 불린 최상위 모듈 → 파일을 JSON 으로 출력한다. 표준 라이브러리와
+# import 전에 이미 있던 모듈(인터프리터 시작 때 sitecustomize·.pth 등이 부른 것)은 뺀다.
 # 파일은 __file__(패키지는 __init__.py), 없으면 네임스페이스 패키지의 첫 폴더, 둘 다 없으면 None
 CHILD_SCRIPT = """
 import json, sys
 sys.path.insert(0, {root!r})
+base = set(sys.modules)
 import {module}
 def where(m):
     return getattr(m, "__file__", None) or next(iter(getattr(m, "__path__", None) or []), None)
-tops = [n for n in list(sys.modules) if "." not in n and n not in sys.stdlib_module_names]
+tops = [n for n in list(sys.modules) if "." not in n and n not in sys.stdlib_module_names and n not in base]
 print(json.dumps({{n: where(sys.modules[n]) for n in tops}}))
 """
 
@@ -168,7 +172,7 @@ def _installed(dist: str) -> str:
 
 @functools.cache
 def _loaded(module: str) -> dict[str, str | None]:
-    """별도 프로세스(LIVE_UPDATES=0)에서 module 을 import 한 뒤 불린 최상위 모듈 → 파일. 표준 라이브러리는 뺀다."""
+    """별도 프로세스(LIVE_UPDATES=0)에서 module import 가 새로 부른 최상위 모듈 → 파일. 표준 라이브러리·시작 때 모듈은 뺀다."""
     script = CHILD_SCRIPT.format(root=str(ROOT), module=module)
     env = {**os.environ, "LIVE_UPDATES": "0", "PYTHONIOENCODING": ENCODING}
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True,
@@ -296,13 +300,13 @@ def test_runtime_header_names_python() -> None:
 
 @pytest.mark.parametrize("module", RUNTIME_IMPORTS)
 def test_import_loads_no_dev_only_package(module: str) -> None:
-    """LIVE_UPDATES=0 인 별도 프로세스에서 module 을 import 한 뒤 sys.modules 에 dev 전용 패키지가 없다."""
+    """LIVE_UPDATES=0 인 별도 프로세스에서 module 을 import 할 때 새로 불린 sys.modules 에 dev 전용 패키지가 없다."""
     assert sorted(set(_loaded(module)) & set(DEV_ONLY)) == []  # 불린 dev 전용 패키지
 
 
 @pytest.mark.parametrize("module", RUNTIME_IMPORTS)
 def test_import_within_runtime_closure(module: str) -> None:
-    """module import 뒤 불린 서드파티 최상위 모듈의 배포판이 모두 런타임 폐포 안이다(런타임 목록만 깐 venv 에서도 import 됨)."""
+    """module import 가 새로 부른 서드파티 최상위 모듈의 배포판이 모두 런타임 폐포 안이다(런타임 목록만 깐 venv 에서도 됨)."""
     bad = {}
     for name, path in _loaded(module).items():
         if path is None or _is_local(path):
