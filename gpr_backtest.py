@@ -7,7 +7,6 @@ SCORE_AT_Z0 + z * SCORE_PER_Z 로 변환. 100점 = 평시 대비 +2σ.
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -56,6 +55,9 @@ def self_check() -> None:
 
 
 def main() -> None:
+    # 백엔드가 이 모듈의 상수를 import 하므로 dev 전용 matplotlib 은 그림을 그릴 때만 불러온다
+    import matplotlib.pyplot as plt
+
     self_check()
     df = load_gpr(DATA_FILE)
     OUT_DIR.mkdir(exist_ok=True)
