@@ -11,6 +11,7 @@ import json
 import numpy as np
 import pandas as pd
 
+import atomic_write
 from gpr_backtest import OUT_DIR, SCORE_AT_Z0, SCORE_PER_Z
 
 BLEND_FILE = OUT_DIR / "blend_weights.json"
@@ -62,7 +63,7 @@ def combine(s1: pd.Series | float | None, s2: pd.Series | float | None, w: dict)
 
 
 def save(w: dict) -> None:
-    BLEND_FILE.write_text(json.dumps(w, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write.write_text(BLEND_FILE, json.dumps(w, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load() -> dict:

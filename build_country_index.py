@@ -6,6 +6,7 @@
 import pandas as pd
 import pycountry
 
+import atomic_write
 import blend
 import index_v1
 import live
@@ -206,14 +207,14 @@ def main() -> None:
                      "high_ratio": round((s["weekly"].dropna() >= HIGH_RISK).mean(), 3)})
     out = pd.concat(frames).rename_axis("date").reset_index()[["country", "date", "daily", "weekly"]]
     out, w = add_blend(out)
-    out.to_csv(COUNTRY_INDEX_FILE, index=False, encoding="utf-8")
+    atomic_write.write_csv(out, COUNTRY_INDEX_FILE, index=False, encoding="utf-8")
     m = pd.DataFrame(meta)
     # 최신일 종합 점수: 각 나라 마지막 v1 날짜의 값
     last = out.dropna(subset=["weekly"]).groupby("country").tail(1).set_index("country")
     m["v2_weekly"] = m["code"].map(last["v2_weekly"])
     m["blended"] = m["code"].map(last["blended"])
     m["grade"] = m["blended"].fillna(m["weekly"]).map(index_v1.grade)
-    m.to_csv(COUNTRY_META_FILE, index=False, encoding="utf-8")
+    atomic_write.write_csv(m, COUNTRY_META_FILE, index=False, encoding="utf-8")
     print(f"국가 {len(m)}개, {len(out)}행 저장 · 종합 가중치 {w}")
     print(m["status"].value_counts(dropna=False).to_string())
     print(m.sort_values("blended", ascending=False).head(15)[

@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+import atomic_write
 import blend
 import index_v1
 import live
@@ -43,7 +44,7 @@ def main() -> None:
               f"비전쟁 24시간 100+ {100 * (peace['daily'] >= HIGH_RISK).mean():.1f}%, "
               f"최신 {x['weekly'].iloc[-1]} ({x['grade'].iloc[-1]})")
     out = pd.concat(frames).rename_axis("date").reset_index()
-    out.to_csv(INDEX_FILE, index=False, encoding="utf-8")
+    atomic_write.write_csv(out, INDEX_FILE, index=False, encoding="utf-8")
     print(f"저장: {INDEX_FILE} ({len(out)}행)")
 
 

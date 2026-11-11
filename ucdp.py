@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 import pycountry
 
+import atomic_write
+
 DOWNLOADS_URL = "https://ucdp.uu.se/downloads/"
 UCDP_DIR = Path("data/ucdp")
 MONTHLY_FILE = Path("data/ucdp_country_monthly.csv")
@@ -123,9 +125,9 @@ def update(force: bool = False) -> bool:
     # 확정판 먼저, 후보판 나중 (같은 id 는 후보판 값 사용)
     events = pd.concat([pd.read_csv(p, usecols=COLUMNS, low_memory=False) for p in paths], ignore_index=True)
     out = aggregate(events)
-    out.to_csv(MONTHLY_FILE, index=False, encoding="utf-8")
-    opponents(events).to_csv(OPPONENT_FILE, index=False, encoding="utf-8")
-    Path(str(MONTHLY_FILE) + ".asof").write_text(out.attrs["as_of"], encoding="utf-8")
+    atomic_write.write_csv(out, MONTHLY_FILE, index=False, encoding="utf-8")
+    atomic_write.write_csv(opponents(events), OPPONENT_FILE, index=False, encoding="utf-8")
+    atomic_write.write_text(Path(str(MONTHLY_FILE) + ".asof"), out.attrs["as_of"], encoding="utf-8")
     unmapped = sorted(set(events["country"]) - {n for n in events["country"].unique() if to_iso3(n)})
     print(f"UCDP 갱신: {', '.join(p.name for p in paths)} · 기준일 {out.attrs['as_of']} · 매핑 실패 {unmapped}")
     return True
