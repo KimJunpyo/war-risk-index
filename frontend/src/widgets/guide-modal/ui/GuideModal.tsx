@@ -79,7 +79,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
             </div>
             <p className="mt-2 text-xs text-neutral-400">
               일반적인 비상 대비 권고를 참고해 자체 작성한 실험용 가이드입니다(참고:{" "}
-              <a href={CHECKLIST_SOURCE.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">
+              <a href={CHECKLIST_SOURCE.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-500 hover:text-neutral-300">
                 {CHECKLIST_SOURCE.name}
               </a>
               ). 정부·민방위·외교부의 공식 경보가 항상 우선합니다.

@@ -1,7 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// 이슈 #31(1-1) 보조 글자 명도 대비 실측. 기준 화면 폭(360·768·1080·1440)마다 상태별로 보이는 글자를 모두 잰다.
+// 이슈 #31(1-1) 보조 글자 명도 대비·#32(1-2) 링크 밑줄 대비 실측. 기준 화면 폭(360·768·1080·1440)마다 상태별로 보이는 글자·밑줄을 모두 잰다.
 // 기준(WCAG 2.2 AA 1.4.3): 4.5:1, 큰 글자(24px 이상 또는 18.66px 이상·굵기 700 이상) 3:1, SVG 글자는 크기와 관계없이 4.5:1.
+// 밑줄(WCAG 1.4.11): 계산된 text-decoration-line 에 underline 이 있는 요소의 text-decoration-color 와 배경 3:1 이상,
+// 같은 요소의 글자 대비 이하(밑줄이 글자보다 튀지 않게). 포인터를 치운 기본 상태만 잰다(hover·focus 색은 재지 않음).
 // 재지 않는 것(plan.md 7절 한계): background-image(그라데이션)·조상 opacity·가상 요소 글자·input 값과 placeholder·option,
 // aria-hidden·비활성 컨트롤 안쪽. 지도 hover 툴팁은 SVG hover 가 불안정해 앱 브라우저에서 수동 확인(이슈 할 일 5).
 // 소스 쪽 계약은 tests/test_m8_contrast.py
@@ -26,12 +28,13 @@ const RATIO_TOLERANCE = 0.01;
 const NEUTRAL_400 = "#a1a1a1"; // Tailwind 4.3.4 neutral-400(oklch 70.8% 0 0)의 sRGB 8비트
 const CHANNEL_TOLERANCE = 1;
 const PROBE_ID = "contrast-probe";
+const UNDERLINE_MIN = 3; // 밑줄 대비 기준(WCAG 1.4.11 비텍스트)
 
-type Measured = { text: string; fg: string; bg: string; ratio: number; min: number };
+type Measured = { text: string; fg: string; bg: string; ratio: number; min: number; underline: string; underlineRatio: number };
 type State = { name: string; root?: string; act?: (page: Page) => Promise<void> };
 
 /** 브라우저 안에서 실행하는 측정 코드(Chromium 앱 브라우저에서 먼저 검증). Playwright 는 함수 본문만 보내므로 도우미를 모두 안에 둔다.
- *  items: root 아래 보이는 글자 요소 전부, picked: 선택자마다 첫 요소, ratios: 색 쌍의 대비(자체 확인용) */
+ *  items: root 아래 보이는 글자 요소 전부, underlines: 보이는 밑줄 요소 전부, picked: 선택자마다 첫 요소, ratios: 색 쌍의 대비(자체 확인용) */
 function contrastInPage({ root, picked, pairs }: { root: string; picked: string[]; pairs: [string, string][] }) {
   const cv = document.createElement("canvas");
   cv.width = cv.height = 1;
@@ -83,25 +86,32 @@ function contrastInPage({ root, picked, pairs }: { root: string; picked: string[
     const bg = paint(layers);
     const svg = el instanceof SVGElement;
     const fg = paint([...layers, svg ? cs.fill : cs.color]);
+    const deco = paint([...layers, cs.textDecorationColor]); // 밑줄 색. 지정이 없으면 currentcolor(글자 색)
     const size = parseFloat(cs.fontSize);
     const weight = parseInt(cs.fontWeight);
     const min = !svg && (size >= 24 || (size >= 18.66 && weight >= 700)) ? 3 : 4.5; // SVG는 viewBox 배율 때문에 늘 4.5
     const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
-    return { text, fg: hex(fg), bg: hex(bg), ratio: ratio(fg, bg), min };
+    return { text, fg: hex(fg), bg: hex(bg), ratio: ratio(fg, bg), min, underline: hex(deco), underlineRatio: ratio(deco, bg) };
   };
 
   const items: Measured[] = [];
+  const underlines: Measured[] = [];
   for (const el of document.querySelector(root)?.querySelectorAll("*") ?? []) {
     if (el.closest('[aria-hidden="true"], :disabled, [aria-disabled="true"], option')) continue;
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
     // sr-only·display:none. 접힌 details 안쪽은 Firefox·WebKit 에서 크기가 있어 여기서 빠지지 않는다(펼치지 않아도 잼)
     if (r.width <= 1 || r.height <= 1 || cs.visibility !== "visible") continue;
-    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim())) continue; // 직접 글자가 있는 요소만
-    items.push(measure(el));
+    const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim()); // 직접 글자가 있는 요소
+    const underlined = cs.textDecorationLine.includes("underline"); // 밑줄은 글자가 자식 요소에만 있어도 잰다
+    if (!hasText && !underlined) continue;
+    const m = measure(el);
+    if (hasText) items.push(m);
+    if (underlined) underlines.push(m);
   }
   return {
     items,
+    underlines,
     picked: picked.map((s) => {
       const el = document.querySelector(s);
       return el && measure(el);
@@ -116,6 +126,8 @@ const audit = (page: Page, root: string, picked: string[] = [], pairs: [string, 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 /** 실패 한 줄: 글자 앞 20자 · 글자 색 / 합성한 배경색 · 대비 < 기준 */
 const line = (m: Measured) => `${m.text} · ${m.fg} / ${m.bg} · ${m.ratio.toFixed(2)} < ${m.min}`;
+/** 밑줄 실패 한 줄: 글자 앞 20자 · 밑줄 색 / 합성한 배경색 · 대비 < 3 */
+const underlineLine = (m: Measured) => `${m.text} · ${m.underline} / ${m.bg} · ${m.underlineRatio.toFixed(2)} < ${UNDERLINE_MIN}`;
 
 /** 패널·카드: 제목(heading)에서 가장 가까운 section.
  *  getByRole("region") 아래 요소에 evaluateAll 을 쓰면 Firefox 페이지가 죽어서(Playwright 1.65) 제목으로 찾는다 */
@@ -138,10 +150,11 @@ const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnima
   .filter((a) => a.effect?.getTiming().iterations !== Infinity)
   .map((a) => a.finished.catch(() => null))));
 
+const HOME: State = { name: "기본 홈" };
 const CHECK_ONE: State = { name: "체크리스트 항목 하나 체크", act: (page) => page.getByRole("checkbox").first().check() };
 
 const STATES: State[] = [
-  { name: "기본 홈" },
+  HOME,
   {
     name: "가이드 모달 열림",
     root: "dialog[open]", // 바깥은 inert 이고 backdrop 에 덮여 모달 안쪽만 잰다
@@ -222,7 +235,7 @@ test("측정 코드 자체 확인: 대비 7.71·4.20 재현, text-neutral-400 �
 for (const width of WIDTHS) {
   test.describe(`${width}px`, () => {
     for (const state of STATES) {
-      test(`${state.name}: 보이는 글자 대비 4.5:1(큰 글자 3:1) 이상`, async ({ page }) => {
+      test(`${state.name}: 보이는 글자 대비 4.5:1(큰 글자 3:1)·밑줄 3:1 이상`, async ({ page }) => {
         // 동작 줄이기: fade-up·pulse 등 애니메이션이 끝난 상태에서 잰다
         await page.emulateMedia({ reducedMotion: "reduce" });
         await page.setViewportSize({ width, height: HEIGHT });
@@ -239,9 +252,20 @@ for (const width of WIDTHS) {
 
         const r = await audit(page, state.root ?? "body", state === CHECK_ONE ? [CHECKED_ITEM, UNCHECKED_ITEM] : []);
         const failures = r.items.filter((m) => m.ratio < m.min).map(line);
-        test.info().annotations.push({ type: "측정 요소 수", description: `${r.items.length}(기준 미달 ${failures.length})` });
+        const underlineFailures = r.underlines.filter((m) => m.underlineRatio < UNDERLINE_MIN).map(underlineLine);
+        const louder = r.underlines.filter((m) => m.underlineRatio > m.ratio)
+          .map((m) => `${m.text} · 밑줄 ${m.underlineRatio.toFixed(2)} > 글자 ${m.ratio.toFixed(2)}`);
+        const lowest = r.underlines.length ? Math.min(...r.underlines.map((m) => m.underlineRatio)).toFixed(2) : "–";
+        test.info().annotations.push(
+          { type: "측정 요소 수", description: `${r.items.length}(기준 미달 ${failures.length})` },
+          { type: "밑줄 요소 수", description: `${r.underlines.length}(최저 ${lowest}, 3:1 미달 ${underlineFailures.length})` },
+        );
         expect(r.items.length, "측정한 글자 요소 수(수집이 깨져 0건으로 통과하는 것을 막음)").toBeGreaterThan(0);
+        if (state === HOME) expect(r.underlines.length, "기본 홈에서 잰 밑줄 요소 수(푸터 링크는 늘 보임)").toBeGreaterThan(0);
         expect.soft(failures, "기준 미달 글자(글자 · 글자 색 / 합성한 배경색 · 대비 < 기준)").toEqual([]);
+        expect.soft(underlineFailures, "3:1 미달 밑줄(글자 · 밑줄 색 / 합성한 배경색 · 대비 < 3)").toEqual([]);
+        // 위계: 밑줄은 같은 요소의 글자보다 옅다
+        expect.soft(louder, "밑줄 대비가 같은 요소의 글자 대비보다 높음").toEqual([]);
 
         if (state === CHECK_ONE) {
           // 위계: 체크한 항목(취소선)이 체크 안 한 항목보다 흐리다

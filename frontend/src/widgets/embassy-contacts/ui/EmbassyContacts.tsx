@@ -3,7 +3,7 @@
 import { useFetch } from "@/shared/api";
 import { CALL_CENTER as cc, telHref, type EmbassyContacts as Contacts } from "../model/embassy";
 
-const LINK = "underline decoration-neutral-700 hover:text-neutral-200";
+const LINK = "underline decoration-neutral-500 hover:text-neutral-200";
 
 function Tel({ text }: { text: string | null }) {
   const href = text && telHref(text);

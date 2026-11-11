@@ -9,7 +9,7 @@ const AUTHOR_LINKS = [
 // 상수(plan.md Q8 "© 2026"): 렌더링 때 연도를 계산하면 서버와 브라우저 시간대가 다를 때 연말·연초에 연도가 달라 hydration 불일치가 남
 const COPYRIGHT_YEAR = 2026;
 const TITLE = "text-sm font-semibold text-neutral-300";
-const LINK = "underline decoration-neutral-700 hover:text-neutral-200";
+const LINK = "underline decoration-neutral-500 hover:text-neutral-200";
 
 /** 사이트 푸터: 소개·고지 / 데이터 출처 / 만든 사람 + 하단 저작권 바.
  *  md 미만 세로 쌓기, md~lg 미만 2열(왼쪽 소개 위·만든 사람 아래, 오른쪽 출처가 두 행 차지),

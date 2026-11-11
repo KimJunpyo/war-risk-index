@@ -150,7 +150,7 @@ export function HomePage() {
                   <span className="hidden md:inline">
                     {summary.advisory.map((a) => <span key={a.source}> · <AdvisoryItem advisory={a} /></span>)}
                   </span>
-                  {" "}<button onClick={() => setGuideOpen(true)} className="underline decoration-neutral-700 hover:text-neutral-300">단계 설명</button>
+                  {" "}<button onClick={() => setGuideOpen(true)} className="underline decoration-neutral-500 hover:text-neutral-300">단계 설명</button>
                 </p>
                 <ul className="md:hidden">
                   {summary.advisory.map((a) => <li key={a.source}><AdvisoryItem advisory={a} /></li>)}
@@ -241,7 +241,7 @@ function summarize(target: Target, pairs: Pair[], countries: Country[]): Summary
 function AdvisoryItem({ advisory: a }: { advisory: Advisory }) {
   return (
     <>
-      {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">{a.name}</a> : a.name}{" "}
+      {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-500 hover:text-neutral-300">{a.name}</a> : a.name}{" "}
       <b className={a.level >= a.max_level ? "text-rose-300" : "text-neutral-300"}>{a.level}/{a.max_level}단계</b>
       {" "}({a.label}{a.source === "kr_mofa" && a.summary?.startsWith(MOFA_PARTIAL) && ` · ${MOFA_PARTIAL}`}
       {/* 외교부는 발표일이 오지 않아 빈 날짜를 표시하지 않음 */}

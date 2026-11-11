@@ -8,7 +8,7 @@ import { countText, filterShelters, formatNumber, PAGE_SIZE, paginate } from "..
 
 const LOCATION_TIMEOUT_MS = 10_000; // 위치 요청 시간 초과
 const LOCATION_GIVEUP_MS = 15_000; // 권한 팝업에 응답이 없으면 브라우저 timeout 이 돌지 않아 자체로 포기
-const LINK = "underline decoration-neutral-700 hover:text-neutral-200";
+const LINK = "underline decoration-neutral-500 hover:text-neutral-200";
 const BUTTON = "rounded-full border border-white/15 px-3 py-1 text-neutral-200 transition hover:bg-white/10 disabled:opacity-50";
 const SELECT = "rounded-md border border-white/15 bg-neutral-900 px-2 py-1 text-neutral-200";
 // max-md:text-base: 16px 보다 작은 입력창은 iOS Safari 가 포커스 때 화면을 확대함. placeholder 는 4.5:1 대비
