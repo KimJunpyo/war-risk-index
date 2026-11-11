@@ -5,6 +5,7 @@
 """
 
 import csv
+import shutil
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -14,6 +15,8 @@ import pandas as pd
 from gpr_backtest import CASES
 
 BASE_URL = "https://data.gdeltproject.org/events/"
+# 연결·읽기가 각각 이 시간 동안 데이터 없이 멈추면 실패. 전체 다운로드 시간의 상한은 아님
+DOWNLOAD_TIMEOUT_SECONDS = 120
 TMP_DIR = Path("data/gdelt_tmp")
 CACHE_FILE = Path("data/gdelt_dyad_monthly.csv")
 CATALYST_FILE = Path("data/gdelt_catalyst.csv")
@@ -86,7 +89,9 @@ def url_for(key: str) -> str:
 def load_events(url: str, tmp: Path) -> pd.DataFrame:
     """GDELT 사건 zip 을 받아 필요한 열만 읽고 원본은 지운다. (1.0·2.0 export 열 위치 동일)"""
     try:
-        urllib.request.urlretrieve(url, tmp)
+        # 크기 검사 생략: 잘린 응답은 zip 이 깨져 read_csv 가 BadZipFile("File is not a zip file")로 실패하고 tmp 는 finally 가 지운다
+        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
         return pd.read_csv(
             tmp, sep="\t", header=None, compression="zip", dtype=str, quoting=csv.QUOTE_NONE,
             usecols=[COL_A1, COL_A2, COL_CODE, COL_ROOT, COL_QUAD, COL_MENTIONS],
