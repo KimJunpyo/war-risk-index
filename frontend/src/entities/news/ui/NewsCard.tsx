@@ -15,7 +15,7 @@ export function NewsCard({ item }: { item: NewsItem }) {
         className="block rounded-lg px-2 py-2.5 transition hover:bg-white/5"
       >
         <p className="line-clamp-2 text-sm text-neutral-100">{title}</p>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-neutral-400">
           {item.source} · {timeAgo(item.published_at)}
         </p>
       </a>

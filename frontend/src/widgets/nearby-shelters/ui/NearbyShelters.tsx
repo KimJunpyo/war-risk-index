@@ -177,7 +177,7 @@ export function NearbyShelters() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 break-words text-neutral-500">{s.address}</p>
+                  <p className="mt-0.5 break-words">{s.address}</p>
                   {/* 2열에서 옆 카드보다 짧아도 아래 줄(수용 인원·지도 링크)은 카드 바닥에 맞춘다 */}
                   <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5">
                     {s.kind && s.kind !== PUBLIC_KIND && (
@@ -205,7 +205,7 @@ export function NearbyShelters() {
         )}
       </div>
 
-      <p className="mt-2 text-[11px] text-neutral-500">
+      <p className="mt-2 text-[11px]">
         위치는 대피소 검색에만 쓰고 저장하지 않습니다. 약 1km 단위로 반올림해 보냅니다.
         {" "}출처: 행정안전부 민방위 대피시설(공공데이터포털){result.data?.as_of && ` · 기준일 ${result.data.as_of}`}
       </p>

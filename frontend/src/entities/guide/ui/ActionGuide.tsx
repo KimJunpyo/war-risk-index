@@ -36,7 +36,7 @@ export function ActionGuide({ score, status, onMore, beside = false }: {
     <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
       <div className="mb-1.5 flex items-baseline gap-2">
         <span className={`text-sm font-semibold ${band.tone}`}>권고: {band.title}</span>
-        <span className="text-[11px] text-neutral-500">{band.range}</span>
+        <span className="text-[11px] text-neutral-400">{band.range}</span>
         <button onClick={onMore} className="ml-auto text-[11px] text-neutral-400 underline decoration-neutral-700 hover:text-neutral-200">
           단계별 가이드
         </button>
@@ -51,19 +51,19 @@ export function ActionGuide({ score, status, onMore, beside = false }: {
                 onChange={() => toggle(it.id)}
                 className="mt-0.5 shrink-0 accent-neutral-400"
               />
-              <span className={checked.includes(it.id) ? "text-neutral-500 line-through" : ""}>{it.text}</span>
+              <span className={checked.includes(it.id) ? "text-neutral-400 line-through" : ""}>{it.text}</span>
             </label>
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[10px] text-neutral-600">
+      <p className="mt-2 text-[10px] text-neutral-400">
         참고:{" "}
         <a href={CHECKLIST_SOURCE.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-400">
           {CHECKLIST_SOURCE.name}
         </a>{" "}
         ({CHECKLIST_SOURCE.checkedAt} 확인) · 문구는 자체 작성. 체크는 이 브라우저에만 저장됩니다.
       </p>
-      <p className="mt-0.5 text-[10px] text-neutral-600">뉴스 기반 실험 지표입니다. 정부·민방위·외교부의 공식 경보가 항상 우선합니다.</p>
+      <p className="mt-0.5 text-[10px] text-neutral-400">뉴스 기반 실험 지표입니다. 정부·민방위·외교부의 공식 경보가 항상 우선합니다.</p>
     </div>
   );
 }

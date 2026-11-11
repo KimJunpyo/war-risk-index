@@ -17,7 +17,7 @@ export function CatalystItem({ event }: { event: CatalystEvent }) {
   const domestic = event.src !== "" && event.src === event.dst;
   return (
     <li className="flex items-center gap-3 py-2 text-sm">
-      <span className="w-12 shrink-0 font-mono text-xs text-neutral-500">{event.date.slice(5)}</span>
+      <span className="w-12 shrink-0 font-mono text-xs text-neutral-400">{event.date.slice(5)}</span>
       <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${TYPE_STYLE[event.type]}`}>{event.type}</span>
       <span className="truncate text-neutral-200">
         {domestic ? (
@@ -27,12 +27,12 @@ export function CatalystItem({ event }: { event: CatalystEvent }) {
           </>
         ) : (
           <>
-            {actor(event.src_name, event.src_iso2, event.src)} <span className="text-neutral-500">→</span>{" "}
+            {actor(event.src_name, event.src_iso2, event.src)} <span className="text-neutral-400">→</span>{" "}
             {actor(event.dst_name, event.dst_iso2, event.dst)}
           </>
         )}
       </span>
-      <span className="ml-auto shrink-0 text-xs text-neutral-500">보도 {event.mentions}건</span>
+      <span className="ml-auto shrink-0 text-xs text-neutral-400">보도 {event.mentions}건</span>
     </li>
   );
 }

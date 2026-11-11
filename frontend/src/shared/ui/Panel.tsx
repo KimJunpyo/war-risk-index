@@ -20,6 +20,6 @@ export function Panel({ title, action, children, className = "" }: {
 
 export function StatusText({ loading, error }: { loading?: boolean; error?: string }) {
   if (error) return <p className="text-sm text-red-400">⚠ {error}</p>;
-  if (loading) return <p className="animate-pulse text-sm text-neutral-500">불러오는 중…</p>;
+  if (loading) return <p className="animate-pulse text-sm text-neutral-400">불러오는 중…</p>;
   return null;
 }

@@ -19,7 +19,7 @@ function AdvisoryNameText({ name }: { name: AdvisoryName }) {
   return (
     <>
       <span className="whitespace-nowrap">{name.main}</span>
-      {name.sub && <span className="block break-keep text-[11px] text-neutral-500">{name.sub}</span>}
+      {name.sub && <span className="block break-keep text-[11px] text-neutral-400">{name.sub}</span>}
     </>
   );
 }
@@ -69,7 +69,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
                 <div key={b.id} className="rounded-xl border border-white/10 p-3">
                   <div className="mb-1 flex items-baseline gap-2">
                     <span className={`font-semibold ${b.tone}`}>{b.title}</span>
-                    <span className="text-xs text-neutral-500">{b.range}</span>
+                    <span className="text-xs text-neutral-400">{b.range}</span>
                   </div>
                   <ul className="list-disc space-y-0.5 pl-5 text-xs text-neutral-300">
                     {b.items.map((it) => <li key={it.id}>{it.text}</li>)}
@@ -77,7 +77,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-xs text-neutral-500">
+            <p className="mt-2 text-xs text-neutral-400">
               일반적인 비상 대비 권고를 참고해 자체 작성한 실험용 가이드입니다(참고:{" "}
               <a href={CHECKLIST_SOURCE.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">
                 {CHECKLIST_SOURCE.name}
@@ -91,7 +91,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
             {/* md 이상: 표. 단계·주 문구는 한 줄, 남는 폭은 의미 열이 쓴다.
                 "N단계"는 텍스트 노드 하나로(JSX {l.level}단계 는 노드 둘이라 Chrome 이 한 줄인데도 getClientRects() 2) */}
             <table className="hidden w-full text-left text-xs md:table">
-              <thead className="text-neutral-500">
+              <thead className="text-neutral-400">
                 <tr>
                   <th className="whitespace-nowrap py-1 pr-3">단계</th>
                   {AGENCIES.map((a) => <th key={a.key} className="break-keep py-1 pr-3">{a.label}</th>)}
@@ -116,7 +116,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
                   <dl className="space-y-1.5 text-neutral-300">
                     {AGENCIES.map((a) => (
                       <div key={a.key} className="flex gap-3">
-                        <dt className="w-20 shrink-0 break-keep text-neutral-500">{a.label}</dt>
+                        <dt className="w-20 shrink-0 break-keep text-neutral-400">{a.label}</dt>
                         <dd className="min-w-0"><AdvisoryNameText name={l[a.key]} /></dd>
                       </div>
                     ))}
@@ -125,7 +125,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-neutral-500">
+            <p className="mt-2 text-xs text-neutral-400">
               영국 FCDO는 공식 숫자 단계가 없어 권고 범위(일부 지역·전역, 필수 외·모든 여행)를 1~4로 환산했습니다. 외교부 특별여행주의보는 이 표에 없습니다. 여행경보는 점수에 반영하지 않습니다.
             </p>
           </section>
