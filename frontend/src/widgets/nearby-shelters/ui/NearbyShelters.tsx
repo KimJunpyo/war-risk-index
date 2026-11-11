@@ -8,7 +8,7 @@ import { countText, filterShelters, formatNumber, PAGE_SIZE, paginate } from "..
 
 const LOCATION_TIMEOUT_MS = 10_000; // 위치 요청 시간 초과
 const LOCATION_GIVEUP_MS = 15_000; // 권한 팝업에 응답이 없으면 브라우저 timeout 이 돌지 않아 자체로 포기
-const LINK = "underline decoration-neutral-700 hover:text-neutral-200";
+const LINK = "underline decoration-neutral-500 hover:text-neutral-200";
 const BUTTON = "rounded-full border border-white/15 px-3 py-1 text-neutral-200 transition hover:bg-white/10 disabled:opacity-50";
 const SELECT = "rounded-md border border-white/15 bg-neutral-900 px-2 py-1 text-neutral-200";
 // max-md:text-base: 16px 보다 작은 입력창은 iOS Safari 가 포커스 때 화면을 확대함. placeholder 는 4.5:1 대비
@@ -177,7 +177,7 @@ export function NearbyShelters() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 break-words text-neutral-500">{s.address}</p>
+                  <p className="mt-0.5 break-words">{s.address}</p>
                   {/* 2열에서 옆 카드보다 짧아도 아래 줄(수용 인원·지도 링크)은 카드 바닥에 맞춘다 */}
                   <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5">
                     {s.kind && s.kind !== PUBLIC_KIND && (
@@ -205,7 +205,7 @@ export function NearbyShelters() {
         )}
       </div>
 
-      <p className="mt-2 text-[11px] text-neutral-500">
+      <p className="mt-2 text-[11px]">
         위치는 대피소 검색에만 쓰고 저장하지 않습니다. 약 1km 단위로 반올림해 보냅니다.
         {" "}출처: 행정안전부 민방위 대피시설(공공데이터포털){result.data?.as_of && ` · 기준일 ${result.data.as_of}`}
       </p>

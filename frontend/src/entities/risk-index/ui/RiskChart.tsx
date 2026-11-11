@@ -92,11 +92,11 @@ export function RiskChart({ points }: Props) {
             <line x1={PAD.left} x2={W - PAD.right} y1={geo.y(v)} y2={geo.y(v)}
               stroke={v === HIGH_RISK ? "#f87171" : "#ffffff"} strokeOpacity={v === HIGH_RISK ? 0.6 : 0.08}
               strokeDasharray={v === HIGH_RISK ? "6 4" : undefined} />
-            <text x={PAD.left - 6} y={geo.y(v) + 4} textAnchor="end" className="fill-neutral-500 text-[11px]">{v}</text>
+            <text x={PAD.left - 6} y={geo.y(v) + 4} textAnchor="end" className="fill-neutral-400 text-[11px]">{v}</text>
           </g>
         ))}
         {geo.years.map((t) => (
-          <text key={t.i} x={geo.x(t.i)} y={H - 6} textAnchor="middle" className="fill-neutral-500 text-[11px]">{t.year}</text>
+          <text key={t.i} x={geo.x(t.i)} y={H - 6} textAnchor="middle" className="fill-neutral-400 text-[11px]">{t.year}</text>
         ))}
         {/* key 가 바뀌면(데이터·기간 변경) 선을 처음부터 다시 그림 */}
         <path key={`d-${geo.daily.length}`} d={geo.daily} fill="none" stroke="#94a3b8" strokeOpacity={0.25}
@@ -111,7 +111,7 @@ export function RiskChart({ points }: Props) {
           <line x1={geo.x(hover)} x2={geo.x(hover)} y1={PAD.top} y2={H - PAD.bottom} stroke="#fff" strokeOpacity={0.3} />
         )}
       </svg>
-      <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-neutral-500">
+      <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-neutral-400">
         <span><i className="mr-1 inline-block h-0.5 w-4 bg-blue-400 align-middle" />일별 뉴스 집계 7일</span>
         <span><i className="mr-1 inline-block h-0.5 w-4 bg-amber-400 align-middle" />종합 (일별+15분 집계, 최근 1년)</span>
         <span><i className="mr-1 inline-block h-0.5 w-4 bg-slate-400/40 align-middle" />24시간 점수</span>

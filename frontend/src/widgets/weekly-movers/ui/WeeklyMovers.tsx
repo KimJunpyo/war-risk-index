@@ -27,7 +27,7 @@ function MoverList({ title, items, onSelect }: {
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs text-neutral-500">{title} (7일 전 대비)</h3>
+      <h3 className="mb-2 text-xs text-neutral-400">{title} (7일 전 대비)</h3>
       <ul className="-mx-2">
         {items.map(({ country: c, delta }) => (
           <li key={c.code}>

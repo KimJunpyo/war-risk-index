@@ -34,7 +34,7 @@ export function PairTabs({ pairs, selected, onSelect }: {
                 value={p.latest?.blended ?? p.latest?.weekly}
                 className={`text-3xl font-semibold tabular-nums ${grade ? GRADE_STYLE[grade].text : "text-neutral-400"}`}
               />
-              <span className="text-xs text-neutral-500">
+              <span className="text-xs text-neutral-400">
                 {p.live ? <>실시간 24시간 {formatScore(p.live.score)}</> : <>24시간 {formatScore(p.latest?.daily)}</>}
               </span>
             </div>

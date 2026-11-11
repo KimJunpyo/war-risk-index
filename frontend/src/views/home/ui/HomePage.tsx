@@ -112,14 +112,14 @@ export function HomePage() {
                   <h2 className="text-xl font-semibold text-white">{summary.title}</h2>
                   {summary.status ? <StatusBadge status={summary.status} /> : <GradeBadge grade={summary.grade ?? null} />}
                 </div>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-neutral-400">
                   기준일 {summary.date ?? "–"}{summary.reason && <> · {summary.reason}</>}
                 </p>
                 {summary.country && <Opponents country={summary.country} className="text-xs text-neutral-400" />}
               </div>
               <div className="flex shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-neutral-500">종합 7일</span>
+                  <span className="text-xs text-neutral-400">종합 7일</span>
                   <AnimatedNumber
                     value={summary.blended ?? summary.daily7}
                     className={`text-4xl font-semibold tabular-nums ${summary.grade ? GRADE_STYLE[summary.grade].text : "text-neutral-300"}`}
@@ -127,13 +127,13 @@ export function HomePage() {
                 </div>
                 {summary.live && (
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-neutral-500">실시간 24시간</span>
+                    <span className="text-xs text-neutral-400">실시간 24시간</span>
                     <AnimatedNumber value={summary.live.score} className="text-2xl font-semibold tabular-nums text-neutral-200" />
                   </div>
                 )}
               </div>
             </div>
-            <p className="text-[11px] text-neutral-500">
+            <p className="text-[11px] text-neutral-400">
               종합 점수 구성: 일별 뉴스 집계 {formatScore(summary.daily7)} · 15분 뉴스 집계 {formatScore(summary.min15)}
               {weights && (
                 <> (결합 비율 {Math.round(weights.w1 * 100)} : {Math.round(weights.w2 * 100)}
@@ -143,14 +143,14 @@ export function HomePage() {
               )}
             </p>
             {summary.advisory.length > 0 && (
-              <div className="text-[11px] text-neutral-500">
+              <div className="text-[11px] text-neutral-400">
                 {/* md 이상은 기관까지 한 문단으로 이어 쓰고, md 미만은 기관마다 한 줄(아래 목록) */}
                 <p>
                   여행경보(점수 미반영)
                   <span className="hidden md:inline">
                     {summary.advisory.map((a) => <span key={a.source}> · <AdvisoryItem advisory={a} /></span>)}
                   </span>
-                  {" "}<button onClick={() => setGuideOpen(true)} className="underline decoration-neutral-700 hover:text-neutral-300">단계 설명</button>
+                  {" "}<button onClick={() => setGuideOpen(true)} className="underline decoration-neutral-500 hover:text-neutral-300">단계 설명</button>
                 </p>
                 <ul className="md:hidden">
                   {summary.advisory.map((a) => <li key={a.source}><AdvisoryItem advisory={a} /></li>)}
@@ -241,7 +241,7 @@ function summarize(target: Target, pairs: Pair[], countries: Country[]): Summary
 function AdvisoryItem({ advisory: a }: { advisory: Advisory }) {
   return (
     <>
-      {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-700 hover:text-neutral-300">{a.name}</a> : a.name}{" "}
+      {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline decoration-neutral-500 hover:text-neutral-300">{a.name}</a> : a.name}{" "}
       <b className={a.level >= a.max_level ? "text-rose-300" : "text-neutral-300"}>{a.level}/{a.max_level}단계</b>
       {" "}({a.label}{a.source === "kr_mofa" && a.summary?.startsWith(MOFA_PARTIAL) && ` · ${MOFA_PARTIAL}`}
       {/* 외교부는 발표일이 오지 않아 빈 날짜를 표시하지 않음 */}

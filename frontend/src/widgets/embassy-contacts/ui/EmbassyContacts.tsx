@@ -3,7 +3,7 @@
 import { useFetch } from "@/shared/api";
 import { CALL_CENTER as cc, telHref, type EmbassyContacts as Contacts } from "../model/embassy";
 
-const LINK = "underline decoration-neutral-700 hover:text-neutral-200";
+const LINK = "underline decoration-neutral-500 hover:text-neutral-200";
 
 function Tel({ text }: { text: string | null }) {
   const href = text && telHref(text);
@@ -28,13 +28,13 @@ export function EmbassyContacts({ code }: { code: string }) {
             {data.embassies.map((e, i) => (
               <li key={`${e.name}-${i}`}>
                 <span className="text-neutral-200">{e.name}</span>
-                {e.kind && <span className="text-neutral-500"> · {e.kind}</span>}
-                {e.address && <span className="block text-neutral-500">{e.address}</span>}
+                {e.kind && <> · {e.kind}</>}
+                {e.address && <span className="block">{e.address}</span>}
                 <span className="block">대표 <Tel text={e.tel} /> · 긴급 <Tel text={e.emergency_tel} /></span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] text-neutral-500">출처: 외교부 재외공관 정보(공공데이터포털) · 기준일 {data.as_of ?? "–"}</p>
+          <p className="mt-2 text-[11px]">출처: 외교부 재외공관 정보(공공데이터포털) · 기준일 {data.as_of ?? "–"}</p>
         </>
       )}
     </div>

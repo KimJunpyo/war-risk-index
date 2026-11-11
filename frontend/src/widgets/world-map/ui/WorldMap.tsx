@@ -271,7 +271,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                 return (
                   <text key={s.key} transform={`translate(${s.center![0]},${s.center![1]}) scale(${1 / t.k})`}
                     y={r ? -r : LABEL_FONT / 3} textAnchor="middle" fontSize={LABEL_FONT}
-                    fill={c ? "#e5e7eb" : "#6b7280"} stroke="#05080e" strokeWidth={3} paintOrder="stroke"
+                    fill={c ? "#e5e7eb" : "#9ca3af"} stroke="#05080e" strokeWidth={3} paintOrder="stroke"
                     className="pointer-events-none font-medium">
                     {s.name}
                   </text>
@@ -302,10 +302,10 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                     ))}</div>
                   )}
                   <Opponents country={hc} className="block" />
-                  {hc.status_reason && <div className="pt-1 text-[11px] text-neutral-500">{hc.status_reason}</div>}
+                  {hc.status_reason && <div className="pt-1 text-[11px]">{hc.status_reason}</div>}
                 </div>
               ) : (
-                <div className="text-neutral-500">데이터 없음 (언급량 부족)</div>
+                <div className="text-neutral-400">데이터 없음 (언급량 부족)</div>
               )}
             </div>
           )}
@@ -325,7 +325,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
           <div className="flex flex-col lg:absolute lg:inset-0">
             <div className="mb-2 flex items-baseline justify-between">
               <h3 className="text-xs font-semibold text-neutral-400">주목 국가</h3>
-              <span className="text-[11px] text-neutral-600">{watch.length}개국</span>
+              <span className="text-[11px] text-neutral-400">{watch.length}개국</span>
             </div>
             <ScrollArea className="lg:min-h-0 lg:flex-1" viewportClassName={`${WATCH_MAX_H} pr-1 lg:h-full`}>
               {/* md~lg 미만에서 2열 */}
@@ -348,11 +348,11 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                     </button>
                   </li>
                 ))}
-                {watch.length === 0 && <li className="text-sm text-neutral-500">없음</li>}
+                {watch.length === 0 && <li className="text-sm text-neutral-400">없음</li>}
               </ul>
             </ScrollArea>
-            <details className="mt-2 text-[11px] text-neutral-500">
-              <summary className="cursor-pointer select-none text-neutral-400">주목 국가 기준</summary>
+            <details className="mt-2 text-[11px] text-neutral-400">
+              <summary className="cursor-pointer select-none">주목 국가 기준</summary>
               {/* label: 안에 포커스 받을 요소가 없어 스크롤 영역이 Tab 포커스를 받아야 키보드로 스크롤됨 */}
               <ScrollArea className="mt-1" viewportClassName={`${CRITERIA_MAX_H} lg:pr-1`} label="주목 국가 기준">
                 <ul className="space-y-1">
@@ -364,7 +364,7 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
         </aside>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-neutral-500">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-neutral-400">
         <span className="flex items-center gap-2">
           점수
           <span className="relative inline-block h-2 w-40 rounded-full" style={{ background: LEGEND_GRADIENT }}>
@@ -381,10 +381,10 @@ export function WorldMap({ countries, selected, onSelect }: Props) {
                 style={{ background: `repeating-linear-gradient(45deg, ${STATUS_STYLE[s].hex} 0 2px, transparent 2px 5px)` }} />
             )}
             <i className="inline-block h-2 w-2 rounded-full" style={{ background: STATUS_STYLE[s].hex }} />
-            {s}{s in HATCH_ID && <span className="text-neutral-600">(빗금+점)</span>}
+            {s}{s in HATCH_ID && <span>(빗금+점)</span>}
           </span>
         ))}
-        <span className="text-neutral-600">드래그 이동 · 휠 확대 · 목록에서 고르면 해당 나라로 이동</span>
+        <span>드래그 이동 · 휠 확대 · 목록에서 고르면 해당 나라로 이동</span>
       </div>
     </Panel>
   );

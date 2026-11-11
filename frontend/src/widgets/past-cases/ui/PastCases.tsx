@@ -36,7 +36,7 @@ export function PastCases({ pairId, pairName, current }: { pairId: string; pairN
           ))}
         </ul>
       )}
-      <p className="mt-3 text-[11px] text-neutral-500">
+      <p className="mt-3 text-[11px] text-neutral-400">
         비교 기준: 일별 뉴스 집계 7일 점수. 과거 사례는 시작일(괄호 안 날짜) 전날 값입니다.
       </p>
     </Panel>
