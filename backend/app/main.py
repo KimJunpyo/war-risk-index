@@ -20,6 +20,7 @@ import dotenv
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 import blend
 import build_country_index
@@ -49,6 +50,7 @@ COUNTRY_INDEX_FILE = ROOT / build_country_index.COUNTRY_INDEX_FILE
 COUNTRY_META_FILE = ROOT / build_country_index.COUNTRY_META_FILE
 CATALYST_ALL_FILE = ROOT / country_collect.CATALYST_ALL_FILE
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+GZIP_MINIMUM_SIZE = 1000  # 이 바이트보다 작은 응답은 압축하지 않음
 LIVE_UPDATES = os.getenv("LIVE_UPDATES", "1") == "1"
 LIVE_INTERVAL_SECONDS = live.SLOT_MINUTES * 60
 COLLECTOR_IDLE_SECONDS = 600  # 이 시간 안에 수집 파일이 바뀌었으면 수동 수집 중으로 보고 일별 갱신을 미룸
@@ -57,8 +59,8 @@ COUNTRY_NEWS_QUERY = "{name} (군사 OR 국방 OR 분쟁 OR 공격 OR 미사일)
 COORD_PATTERN = r"^-?\d{1,3}(\.\d{1,2})?$"
 KOREA_LAT, KOREA_LON = (33.0, 39.0), (124.0, 132.0)
 SHELTER_RADIUS_M = 5000
-SHELTER_NEARBY_LIMIT = 10
-SHELTER_REGION_LIMIT = 50
+SHELTER_NEARBY_LIMIT = 1000  # 위치 조회 안전 상한(실데이터 5km 안 최대 약 600곳)
+SHELTER_REGION_LIMIT = 1000  # 지역 조회 안전 상한(시·군·구 최대 527곳. 시·도만 주면 상한에 걸릴 수 있음)
 METERS_PER_DEG_LAT = 111_000  # 반경 사전 필터용 근사
 SHELTER_FIELDS = ["name", "address", "lat", "lon", "distance_m", "capacity", "kind"]
 # 지수 표의 공통 열 (v1 7일, v2 7일, 종합, 24시간, 등급)
@@ -202,6 +204,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="War Risk Index API", version="1.1", lifespan=lifespan)
+# 나중에 추가한 미들웨어가 바깥(CORS 가 GZip 을 감쌈). 어느 순서든 응답 헤더는 같고, CORS 가 바깥이면 preflight 에 압축 단계 없이 바로 답함
+app.add_middleware(GZipMiddleware, minimum_size=GZIP_MINIMUM_SIZE)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET"])
 
 
@@ -434,12 +438,12 @@ def _shelter_items(df: pd.DataFrame) -> list[dict]:
 def list_shelters(lat: str | None = Query(None, pattern=COORD_PATTERN),
                   lon: str | None = Query(None, pattern=COORD_PATTERN),
                   region: str | None = Query(None, min_length=2, max_length=40)) -> dict:
-    """좌표(소수 2자리까지) 기준 5km 안 가까운 10곳, 또는 region="시·도[ 시·군·구]" 의 최대 50곳.
-    요청 좌표는 로그·파일에 남기지 않는다."""
+    """좌표(소수 2자리까지) 기준 5km 안 전부(가까운 순), 또는 region="시·도[ 시·군·구]" 의 전부(이름순).
+    둘 다 안전 상한에서 자르고 total 은 자르기 전 건수. 요청 좌표는 로그·파일에 남기지 않는다."""
     if (lat is None or lon is None) and not region:
         raise HTTPException(422, "lat·lon 또는 region 이 필요함")
     df = _shelters()
-    out = {"available": not df.empty, "as_of": df["updated"].max() if len(df) else None, "items": []}
+    out = {"available": not df.empty, "as_of": df["updated"].max() if len(df) else None, "items": [], "total": 0}
     if df.empty:
         return out
     if lat is not None and lon is not None:
@@ -450,13 +454,15 @@ def list_shelters(lat: str | None = Query(None, pattern=COORD_PATTERN),
         dx = dy / math.cos(math.radians(y))
         near = df[df["lat"].between(y - dy, y + dy) & df["lon"].between(x - dx, x + dx)].copy()
         near["distance_m"] = [round(shelters.haversine_m(y, x, a, b)) for a, b in zip(near["lat"], near["lon"])]
-        near = near[near["distance_m"] <= SHELTER_RADIUS_M].sort_values("distance_m").head(SHELTER_NEARBY_LIMIT)
-        out["items"] = _shelter_items(near)
+        near = near[near["distance_m"] <= SHELTER_RADIUS_M]  # total 은 사각형 사전 필터가 아니라 반경 안 건수
+        out["total"] = len(near)
+        out["items"] = _shelter_items(near.sort_values("distance_m").head(SHELTER_NEARBY_LIMIT))
         return out
     sido, _, sigungu = region.strip().partition(" ")
     rows = df[df["sido"] == sido]
     if sigungu.strip():
         rows = rows[rows["sigungu"] == sigungu.strip()]
+    out["total"] = len(rows)
     out["items"] = _shelter_items(rows.sort_values("name").head(SHELTER_REGION_LIMIT).assign(distance_m=None))
     return out
 
