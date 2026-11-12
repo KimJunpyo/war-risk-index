@@ -182,7 +182,10 @@ def _daily_refresh() -> None:
     if (meta.empty or meta["date"].max() < yesterday.strftime("%Y-%m-%d")) and \
             _url_exists(gdelt_collect.url_for(key)):
         log.info("새 일별 파일 %s: 수집·지수 재계산", key)
-        ucdp.update()
+        try:
+            ucdp.update()
+        except Exception:  # 월 1회 바뀌는 데이터라 기존 집계로 계속
+            log.exception("UCDP 갱신 실패")
         gdelt_collect.main()
         country_collect.main()
         build_index.main()
