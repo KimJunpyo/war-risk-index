@@ -6,6 +6,7 @@
   - 데이터(`data/`, `out/`)는 git에 올리지 않고 DB도 없으므로 파일을 복사해서 옮긴다.
   - "하루 1회" 판단은 `time.time() - mtime`으로 하므로 이전할 때 mtime을 보존해야 한다.
   - 보존하지 않으면 여행경보·대피소·재외공관 갱신이 하루 가까이 밀린다. 일별 재계산도 10분 미뤄진다(`backend/app/main.py`의 `COLLECTOR_IDLE_SECONDS`).
+  - **`out/`도 반드시 함께 옮긴다(M9 리뷰):** 일별 재계산은 `build_index`를 `build_country_index`보다 먼저 돌려서, 쌍 지수가 직전 주기 가중치(`out/blend_weights.json`)를 쓴다(`plan.md` 4절 사실 7). 가중치 파일 없이 새 서버를 띄우면 첫날 쌍 지수 `blended`가 최대 약 34점 틀린다(리뷰어 계산).
 - **자동 보충:** 서비스가 멈춘 기간의 데이터는 백엔드가 다시 뜨면 저절로 채워진다.
   - 실시간 최근 26시간 슬롯: `live.update`
   - 2.0 일별: `live.backfill`
@@ -40,9 +41,12 @@
         - 서비스 사용자로 풀어야 파일 소유자가 그 사용자가 된다.
         - mtime은 GNU tar 기본 동작으로 보존된다.
      2. 파일 2개의 mtime을 `stat -c %Y`로 확인한다.
-     3. 백엔드를 시작하고 자동 보충을 확인한다.
-     4. `/tmp`의 압축 파일을 지운다.
+     3. 폴더 쓰기 권한을 확인한다: `sudo -u warrisk find /srv/war-risk-index/data /srv/war-risk-index/out -type d ! -writable`의 출력이 없어야 한다. 원자적 쓰기(1-1)가 같은 폴더에 `<파일>.part`를 만들기 때문이다(M9 리뷰).
+     4. 백엔드를 시작하고 자동 보충을 확인한다.
+     5. `/tmp`의 압축 파일을 지운다.
    - mtime을 보존해야 하는 이유를 한 줄로 적는다.
+   - `out/`를 함께 옮기는 이유를 한 줄로 적는다. 못 옮겼으면 첫 기동 전에, 백엔드를 멈춘 상태에서 서비스 사용자로 한 번만 국가 → 쌍 순서로 돌린다. 이 순서여야 쌍 지수가 새 가중치를 쓴다. `out/` 폴더부터 만든다. `out/`은 git 추적 대상이 아니라 새로 clone하면 없고, 지수 쓰기는 폴더를 만들지 않는다(M9 문서 리뷰 실측).
+     `cd /srv/war-risk-index && sudo -u warrisk mkdir -p out && sudo -u warrisk .venv/bin/python -c "import build_country_index, build_index; build_country_index.main(); build_index.main()"`
 2. **`deploy/backup.sh`** (bash. tar·find·date만 쓰고 새 의존성 없음)
    - **변수:** 맨 위에 두고, 환경변수로 덮어쓸 수 있게 한다.
      - `APP_DIR`: 기본 `/srv/war-risk-index`
@@ -50,6 +54,7 @@
      - `KEEP_DAYS`: 기본 7
    - **입력 확인:** `APP_DIR`에 `data`나 `out`이 없으면 0이 아닌 종료 코드로 끝나고 아무것도 지우지 않는다.
    - **압축:** `data/`·`out/`을 `war-risk-<YYYYmmdd-HHMM>.tgz`로 묶는다. 제외 대상: `data/npm_cache`, `data/gdelt_tmp`, `*.part`, `*.tmp`
+     - `*.part`는 원자적 쓰기(1-1)·UCDP 다운로드·기존 교체 쓰기의 임시 파일이고, `*.tmp`는 `live.py`의 임시 파일이다(M9에서 이름 확인).
    - **tar 종료 코드:**
      - 1(읽는 동안 파일이 바뀜)은 경고만 남기고 성공으로 처리한다. 2 이상이면 실패다.
      - 일부러 재현하기 어려우므로 코드 리뷰로 확인한다.
@@ -73,10 +78,17 @@
      - `https://<도메인>/`
    - **알림을 받았을 때 점검 순서:**
      1. `systemctl status war-risk-api war-risk-web caddy`
-     2. `journalctl -u war-risk-api --since "1 hour ago"`
-     3. `curl -s https://<도메인>/api/health`: 실시간과 일별 중 무엇이 늦었는지 본다.
-     4. GDELT 접속: `curl -sI http://data.gdeltproject.org/gdeltv2/lastupdate.txt`
+     2. `journalctl -u war-risk-api --since "1 hour ago"`. 이 순서는 알림이 왔을 때 쓴다. UCDP 갱신은 실패해도 헬스 체크가 200이라 알림이 오지 않으므로 아래 6번으로 따로 본다(1-2).
+     3. `curl -s https://<도메인>/api/health`: 실시간과 일별 중 무엇이 늦었는지 본다. 나이 두 값을 읽는 법을 한 줄씩 적는다(1-3, M9 실측).
+        - `live_age_minutes`: 분 단위 내림 정수다. 정상 범위는 약 −11~+20분이고 음수도 정상이다. GDELT 2.0 슬롯 key가 실제 발행보다 약 10~11분 늦기 때문이다. 60을 넘으면 503이다.
+        - `index_age_days`: UTC 달력 날짜 차다. 정상값은 1~2다. D일 GDELT 1.0 파일이 D+1일 07:00 UTC 무렵 올라오기 때문이다. 3을 넘으면 503이다.
+     4. GDELT 접속: `curl -sIL http://data.gdeltproject.org/gdeltv2/lastupdate.txt`. 301 다음 200이 보이면 나가는 80·443이 모두 열려 있다.
      5. 디스크 `df -h`, 메모리 `free -m`, OOM `journalctl -k | grep -i "out of memory"`
+     6. **UCDP 기준일(월 1회, 알림과 별개):** `cat /srv/war-risk-index/data/ucdp_country_monthly.csv.asof`가 오늘보다 90일 넘게 오래됐으면 UCDP 갱신이 멈춘 것이다.
+        - 정상은 약 60일 이내다(확실하지 않음). UCDP 후보판은 한 달 이내 지연으로 월 1회 공개되므로, 다음 공개 직전에 가장 오래돼 약 60일이 된다. 공개일은 정해져 있지 않다. 지금 값 2026-10-04는 2026-11-12 기준 39일이다.
+        - 접속 실패는 `journalctl -u war-risk-api --since "30 days ago" | grep -c "UCDP 갱신 실패"`로 보인다.
+        - 페이지 모양이 바뀐 경우는 로그가 없다. 받은 뒤 집계가 실패한 경우는 실패한 날 한 번만 남고, 다음 UCDP 버전까지 다시 집계하지 않는다(1-2). 어느 쪽인지는 `ucdp.latest_urls()`가 빈 목록인지로 가린다(빈 목록이면 페이지 모양이 바뀐 것).
+        - 집계 실패였다면 백엔드를 멈추고 서비스 사용자로 `ucdp.update(force=True)`를 한 번 실행한다. 페이지 모양이 바뀐 경우는 `ucdp.py`의 `GED_PATTERN`·`CANDIDATE_PATTERN`을 고쳐야 한다.
    - **조치:** 점검 결과에 따라 재시작, 되돌리기(2-2), 복원 중 하나를 고른다.
 5. **로컬 리허설** (2-2에서 만든 저장소 밖 사본을 쓴다)
    - 이전용 압축을 만들어 사본에 풀고 원본과 비교한다. 사본에서 백엔드(포트 8001, `LIVE_UPDATES=0`)를 띄워 API를 확인한다.
@@ -101,14 +113,19 @@
 - [ ] Git Bash에서 `backup.sh`를 실행하면 종료 코드가 0이고, `BACKUP_DIR`에 `war-risk-*.tgz`가 1개 생긴다. 압축 목록에 `data/npm_cache/`와 `.env`가 없다. 압축 크기를 PR에 적는다(Q6 판단용). [명령]
 - [ ] `BACKUP_DIR`에 수정 시각이 `KEEP_DAYS + 1`일 전인 가짜 백업(`war-risk-old.tgz`)을 두고 실행하면 그 파일만 지워지고 새 백업은 남는다. [명령]
 - [ ] `APP_DIR`을 없는 경로로 주면 0이 아닌 종료 코드로 끝나고 `BACKUP_DIR`의 파일은 그대로다. [명령]
-- [ ] 가동 감시 절에 감시 주소 2개와 점검 명령 5단계가 있다. [수동]
+- [ ] 가동 감시 절에 감시 주소 2개, 알림 때 점검 명령 5단계, UCDP 기준일 점검(6번)이 있다. [수동]
+  - 3단계에는 `live_age_minutes`·`index_age_days`의 정상 범위(음수 정상 포함)와 503 기준이 있다.
+  - 6번에는 `.asof` 확인 명령, 90일 기준, 원인별 조치(접속 실패·페이지 모양 변경·집계 실패)가 있다.
+- [ ] 데이터 이전 절에 다음이 있다. [수동]
+  - `out/`를 함께 옮기는 이유, 그리고 못 옮겼을 때 첫 기동 전에 `out/` 폴더를 만들고 `build_country_index` → `build_index` 순서로 돌리는 명령(백엔드 정지 상태)
+  - `data/`·`out/` 폴더 쓰기 권한 확인 명령
 - [ ] 복원 절은 현재 데이터를 지우지 않고 이름을 바꿔 보관하는 순서로 돼 있다. [수동]
 - [ ] 커밋한 뒤 `git ls-files --eol deploy/backup.sh`가 `i/lf`다. [명령]
 - [ ] `.venv\Scripts\python.exe -m pytest tests`가 전부 통과한다. [테스트]
 
 ### 서버에서 확인(M3)
 
-- 3-1: 데이터 이전 절을 실행하고 mtime 보존과 자동 보충을 확인한다.
+- 3-1: 데이터 이전 절을 실행하고 mtime 보존, 폴더 쓰기 권한, 자동 보충을 확인한다.
 - 3-2: cron 백업, 복원 리허설, 감시 알림 수신, 서버 밖 사본을 확인한다.
 
 ## 영향 파일
