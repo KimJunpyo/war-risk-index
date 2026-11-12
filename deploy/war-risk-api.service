@@ -1,0 +1,24 @@
+# war-risk-index 백엔드(uvicorn). 값은 서버 규약(docs/plan/deploy-prep/plan.md 5절)을 따른다.
+# 경로·사용자·포트를 바꾸면 deploy/Caddyfile·war-risk-web.service 와 런북도 함께 바꾼다.
+[Unit]
+Description=war-risk-index API (uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=warrisk
+# 수집 모듈이 Path("data/...") 상대 경로를 쓰므로 작업 디렉터리는 저장소 루트다.
+WorkingDirectory=/srv/war-risk-index
+# 비밀값은 Environment= 에 넣지 않는다. backend/app/main.py 가 시작할 때 저장소 루트 .env 를 읽는다.
+# PYTHONUNBUFFERED: 수집 스크립트의 print 가 바로 journald 에 보이게 한다.
+Environment=PYTHONUNBUFFERED=1
+# --workers 1: 워커마다 갱신 스레드가 떠서 같은 CSV 를 동시에 쓴다. 원자적 쓰기의 임시 파일(<파일>.part)도 작성자 1명을 전제한다.
+# --loop asyncio: 로컬 개발·테스트와 같은 루프. 버전을 고정하지 않은 uvloop 를 서버에서만 쓰지 않게 한다.
+# --no-access-log: 대피소 요청 주소의 좌표 쿼리를 로그에 남기지 않는다(Q11).
+ExecStart=/srv/war-risk-index/.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --workers 1 --loop asyncio --no-access-log
+Restart=always
+RestartSec=5
+# TimeoutStopSec 은 기본값(90초)을 쓴다. 갱신 스레드는 daemon 스레드라 종료를 막지 않는다.
+
+[Install]
+WantedBy=multi-user.target

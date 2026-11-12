@@ -1,0 +1,20 @@
+# war-risk-index 프론트(next start). 값은 서버 규약(docs/plan/deploy-prep/plan.md 5절)을 따른다.
+# 경로·사용자·포트를 바꾸면 deploy/Caddyfile·war-risk-api.service 와 런북도 함께 바꾼다.
+[Unit]
+Description=war-risk-index web (next start)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=warrisk
+WorkingDirectory=/srv/war-risk-index/frontend
+# npm 래퍼 없이 next 를 직접 부른다. npm 이 종료 신호를 자식에게 넘기는지 확실하지 않다.
+# Node 경로는 런북의 NodeSource 설치 기준이다(/usr/bin/node).
+ExecStart=/usr/bin/node /srv/war-risk-index/frontend/node_modules/.bin/next start --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+# Next 문서가 종료 신호 뒤 10~30초 기다리기를 권한다.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

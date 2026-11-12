@@ -1,0 +1,17 @@
+# war-risk-index 리버스 프록시. 값은 서버 규약(docs/plan/deploy-prep/plan.md 5절)을 따른다.
+# 포트를 바꾸면 deploy/war-risk-api.service·war-risk-web.service 와 런북도 함께 바꾼다.
+# 사이트 주소는 caddy 서비스의 환경변수 SITE_DOMAIN 으로 받는다(도메인을 여기 적지 않는다).
+# 인증서 발급·갱신과 HTTP→HTTPS 리디렉션은 Caddy 기본 동작을 쓴다.
+# log 는 넣지 않는다: 대피소 요청 주소에 좌표 쿼리가 있어 접근 로그에 남기면 안 된다.
+# encode 도 넣지 않는다: 백엔드(GZip)와 Next 가 이미 압축한다.
+{$SITE_DOMAIN} {
+	# /api/health 는 외부 가동 감시 전용이라 Caddy 헬스 체크에 쓰지 않는다(능동·수동 모두).
+	# 데이터가 오래되면 일부러 503 을 주므로, 헬스 체크에 쓰면 데이터만 멈춰도 하나뿐인 백엔드가
+	# 비정상으로 빠져 정상 응답하던 /api/pairs·/api/countries 까지 막힌다.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

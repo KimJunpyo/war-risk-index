@@ -1,0 +1,2 @@
+# deploy/ 파일은 Linux 서버에서 그대로 쓰므로 core.autocrlf=true 인 PC 의 작업 트리에서도 LF 로 둔다.
+deploy/** text eol=lf
