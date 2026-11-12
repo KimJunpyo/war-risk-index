@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
 -r requirements.txt
-pytest==9.2.0
-httpx==0.28.1
+pytest==9.2.0  # 테스트
+httpx==0.28.1  # 테스트(fastapi TestClient)
+matplotlib==3.11.2  # 백테스트 그림(gpr_backtest.py 등)
+xlrd==2.0.2  # 백테스트 .xls 읽기(gpr_backtest.py 의 pd.read_excel)

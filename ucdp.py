@@ -6,11 +6,15 @@ API 는 토큰(이메일 신청)이 필요해, 공개 다운로드 파일을 쓴
 """
 
 import re
+import shutil
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pandas as pd
 import pycountry
+
+import atomic_write
 
 DOWNLOADS_URL = "https://ucdp.uu.se/downloads/"
 UCDP_DIR = Path("data/ucdp")
@@ -118,14 +122,19 @@ def update(force: bool = False) -> bool:
         return False
     for u, p in new:
         tmp = p.with_suffix(p.suffix + ".part")
-        urllib.request.urlretrieve(u, tmp)
-        tmp.replace(p)
+        with urllib.request.urlopen(u, timeout=TIMEOUT_SECONDS) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+            size = int(r.headers.get("Content-Length", 0))
+            # urlopen 은 Content-Length 보다 덜 받고 끊겨도 예외를 내지 않는다. 잘린 파일이 남으면 다음 실행이 건너뜀
+            if f.tell() < size:
+                raise urllib.error.ContentTooShortError(f"{u}: {size} 바이트 중 {f.tell()} 바이트만 받음", (str(tmp), r.headers))
+        tmp.replace(p)  # 파일을 닫은 뒤 교체(Windows 는 열린 파일을 교체하지 못함)
     # 확정판 먼저, 후보판 나중 (같은 id 는 후보판 값 사용)
     events = pd.concat([pd.read_csv(p, usecols=COLUMNS, low_memory=False) for p in paths], ignore_index=True)
     out = aggregate(events)
-    out.to_csv(MONTHLY_FILE, index=False, encoding="utf-8")
-    opponents(events).to_csv(OPPONENT_FILE, index=False, encoding="utf-8")
-    Path(str(MONTHLY_FILE) + ".asof").write_text(out.attrs["as_of"], encoding="utf-8")
+    atomic_write.write_csv(out, MONTHLY_FILE, index=False, encoding="utf-8")
+    atomic_write.write_csv(opponents(events), OPPONENT_FILE, index=False, encoding="utf-8")
+    atomic_write.write_text(Path(str(MONTHLY_FILE) + ".asof"), out.attrs["as_of"], encoding="utf-8")
     unmapped = sorted(set(events["country"]) - {n for n in events["country"].unique() if to_iso3(n)})
     print(f"UCDP 갱신: {', '.join(p.name for p in paths)} · 기준일 {out.attrs['as_of']} · 매핑 실패 {unmapped}")
     return True
