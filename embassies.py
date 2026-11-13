@@ -6,6 +6,7 @@
 
 import html
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +20,9 @@ REFRESH_SECONDS = 20 * 3600  # 파일이 이보다 새로우면 다시 받지 �
 RETRY_SECONDS = 6 * 3600  # 실패 뒤 이 시간 동안은 재수신하지 않음(15분 주기 갱신 루프 대비)
 EMBASSY_TYPE_CODE = "10"  # embassy_ty_cd: 10 대사관, 20 총영사관 등
 COLUMNS = ["iso2", "name", "kind", "kind_cd", "address", "tel", "emergency_tel"]
+# 수집일(KST) 열. 파일 mtime 은 복사·복원(배치 환경)하면 바뀌고 시간대도 달라 쓰지 않는다
+COLLECTED_COLUMN = "collected"
+KST = timezone(timedelta(hours=9))
 # 영사콜센터 (출처 https://www.0404.go.kr, 확인일 2026-11-09)
 CALL_CENTER = {"tel": "02-3210-0404", "tel_overseas": "+82-2-3210-0404", "source": "https://www.0404.go.kr"}
 # 원문 오류로 알려진 행 (나라, 공관명, 주소에 든 글자). 주 멕시코 대사관 이름으로 아바나(쿠바) 주소·전화가 옴(2026-11-09).
@@ -68,6 +72,7 @@ def update(force: bool = False) -> bool:
     except Exception:
         _last_failure = time.time()
         raise
+    df = df.assign(**{COLLECTED_COLUMN: datetime.now(KST).strftime("%Y-%m-%d")})
     EMBASSY_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = EMBASSY_FILE.with_suffix(".csv.part")
     df.to_csv(tmp, index=False, encoding="utf-8")

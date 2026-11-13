@@ -1,6 +1,7 @@
 """M12 이슈 #50 응답 JSON 생성기(publish.py) 회귀 테스트.
 
-같은 data/·out/ 로 지금 API(TestClient) 응답과 생성 파일을 JSON 파싱 뒤 대조한다.
+같은 data/·out/ 픽스처(tests/fixtures/m12, make_fixture.py 로 실제 데이터에서 잘라 만듦)로
+지금 API(TestClient) 응답과 생성 파일을 JSON 파싱 뒤 대조한다. 실제 data/·out/ 은 읽지 않는다.
 공공데이터 키가 있을 때와 없을 때(대피소·공관 available false) 둘 다 본다. 파일은 tmp 폴더에만 쓴다.
 대피소 위치 검색은 Worker 로직(타일 합치기 → 사각형·반경 필터 → 거리순)을 Python 으로 흉내 내 대조한다.
 """
@@ -11,17 +12,26 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+import blend
+import embassies
 import publish
 import shelters
 from backend.app import main
 
 KEY_ENV = main.DATA_GO_KR_SERVICE_KEY
-# 대표 좌표: 서울 도심·부산·제주·타일 경계(정확히 0.1° 선)·세종·범위 밖
-POINTS = [("37.57", "126.98"), ("35.18", "129.08"), ("33.5", "126.53"), ("37.5", "127"),
-          ("36.48", "127.29"), ("40", "127")]
+FIX = Path(__file__).resolve().parent / "fixtures" / "m12"
+# 대표 좌표: 서울 도심·부산·타일 경계(정확히 0.1° 선, 픽스처 구역 가장자리)·제주(픽스처에 시설 없음)·범위 밖
+POINTS = [("37.57", "126.98"), ("35.18", "129.08"), ("37.6", "127"), ("33.5", "126.53"), ("40", "127")]
+NONEMPTY = POINTS[:3]  # 키가 있으면 반경 안 시설이 있어야 하는 좌표
+FIXTURE_COLLECTED = "2026-11-13"  # make_fixture.COLLECTED
+# main 이 import 때 ROOT 로 만들어 두는 경로. 나머지는 요청 때 main.ROOT / <모듈 상수> 로 만든다
+IMPORT_TIME_PATHS = {"INDEX_FILE": "out/index_v1.csv", "CATALYST_FILE": "data/gdelt_catalyst.csv",
+                     "COUNTRY_INDEX_FILE": "out/country_index.csv", "COUNTRY_META_FILE": "out/country_meta.csv",
+                     "CATALYST_ALL_FILE": "data/gdelt_catalyst_all.csv"}
 
 
 @pytest.fixture(scope="module", params=["key", "no_key"])
@@ -30,6 +40,10 @@ def published(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathF
     out_dir = tmp_path_factory.mktemp(f"api_{request.param}")
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv(KEY_ENV, "test-key" if request.param == "key" else "")
+        mp.setattr(main, "ROOT", FIX)
+        for name, rel in IMPORT_TIME_PATHS.items():
+            mp.setattr(main, name, FIX / rel)
+        mp.setattr(blend, "BLEND_FILE", FIX / "out" / "blend_weights.json")  # blend.load 는 작업 폴더 기준 상대 경로
         publish.write(publish.build(), out_dir)
         yield request.param, out_dir
 
@@ -79,7 +93,7 @@ def test_files_match_api(published: tuple[str, Path], client: TestClient) -> Non
         assert res.status_code == 200, url
         assert _load(out_dir, rel) == res.json(), url
         checked += 1
-    assert checked > 100
+    assert checked >= 40  # 쌍·나라별 파일까지 실제로 대조했는지
 
 
 def test_status_matches_health(published: tuple[str, Path], client: TestClient) -> None:
@@ -132,10 +146,34 @@ def test_nearby_from_tiles_matches_api(published: tuple[str, Path], client: Test
     case, out_dir = published
     api = client.get(f"/api/shelters?lat={lat}&lon={lon}").json()
     worker = _worker_nearby(out_dir, lat, lon)
-    if case == "key" and lat != "40":
+    if case == "key" and (lat, lon) in NONEMPTY:
         assert api["total"] > 0  # 빈 결과끼리 같아서 통과하는 일이 없도록
     assert [s["distance_m"] for s in worker["items"]] == sorted(s["distance_m"] for s in worker["items"])
     assert _tie_order(worker) == _tie_order(api)
+
+
+def test_fixture_is_not_empty(published: tuple[str, Path]) -> None:
+    """빈 표끼리 같아서 대조가 통과하는 일이 없도록 픽스처가 실제로 채워졌는지 본다."""
+    case, out_dir = published
+    assert all(p["latest"] for p in _load(out_dir, "pairs.json"))
+    countries = _load(out_dir, "countries.json")
+    assert len(countries) == 8 and all(c["live"] for c in countries)
+    assert _load(out_dir, "countries/UKR/catalysts.json")["events"]
+    assert _load(out_dir, "pairs/RUS-UKR/catalysts.json")["events"]
+    assert None not in _load(out_dir, "status.json").values()
+    jpn = _load(out_dir, "countries/JPN/embassies.json")
+    assert jpn["as_of"] == (FIXTURE_COLLECTED if case == "key" else None)
+    assert bool(jpn["embassies"]) == (case == "key")
+
+
+def test_embassy_as_of_fallback_mtime(tmp_path: Path) -> None:
+    """수집일 열이 없는 예전 파일만 mtime(KST 날짜)을 쓴다."""
+    path = tmp_path / "embassies.csv"
+    path.write_text("iso2,name\nJP,x\n", encoding="utf-8")
+    expected = main.datetime.fromtimestamp(path.stat().st_mtime, embassies.KST).strftime("%Y-%m-%d")
+    assert main._embassy_as_of(pd.DataFrame({"iso2": ["JP"]}), path) == expected
+    df = pd.DataFrame({"iso2": ["JP"], embassies.COLLECTED_COLUMN: ["2026-01-02"]})
+    assert main._embassy_as_of(df, path) == "2026-01-02"
 
 
 def test_write_removes_stale_files(tmp_path: Path) -> None:

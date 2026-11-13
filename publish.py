@@ -66,17 +66,19 @@ def build() -> dict[str, Any]:
         "blend.json": main.blend_weights(),
         "live.json": main.live_status(),
         # Worker 가 요청 시각 기준으로 나이를 계산한다(/api/health 와 같은 원천)
-        "status.json": {"live_as_of": main._max_or_none(main._csv(main.ROOT / main.live.COUNTRY_LIVE,
-                                                                  dtype={"key": str}), "key"),
-                        "index_date": main._max_or_none(main._meta(), "date")},
+        "status.json": dict(zip(("live_as_of", "index_date"), main.freshness())),
     }
     for pid in PAIRS:
         out[f"pairs/{pid}/index.json"] = main.pair_index(pid)
         out[f"pairs/{pid}/catalysts.json"] = main.pair_catalysts(pid, days=CATALYST_DAYS)
+    cat = main.country_catalyst_rows()  # 나라마다 전체 표를 다시 합치고 거르지 않도록 한 번만 읽고 나눔
+    src = cat.groupby("src").indices if len(cat) else {}
+    dst = cat.groupby("dst").indices if len(cat) else {}
     for c in out["countries.json"]:
         code = c["code"]
+        rows = cat.iloc[sorted({*src.get(code, ()), *dst.get(code, ())})]
         out[f"countries/{code}/index.json"] = main.country_index(code)
-        out[f"countries/{code}/catalysts.json"] = main.country_catalysts(code, days=CATALYST_DAYS)
+        out[f"countries/{code}/catalysts.json"] = main.country_catalyst_response(rows, code, CATALYST_DAYS)
         out[f"countries/{code}/embassies.json"] = main.country_embassies(code)
     out.update(_shelter_payloads())
     return out
