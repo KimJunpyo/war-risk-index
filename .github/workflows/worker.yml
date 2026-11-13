@@ -1,0 +1,46 @@
+# Worker 배포(#53): worker/ 가 바뀌어 main 에 푸시되면 테스트를 돌린 뒤 wrangler deploy 한다
+name: worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+  workflow_dispatch:
+
+# 배포끼리 겹치지 않게 앞 실행이 끝날 때까지 기다린다(대기는 하나만 남는다)
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # 수동 실행(workflow_dispatch)으로 main 이 아닌 브랜치를 배포하지 못하게 한다
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # 멈춘 실행이 러너를 오래 잡지 않게. Actions 실측 뒤 조정한다
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # 시크릿은 이 단계에만 준다. 버킷 이름은 저장소에 남기지 않고 러너의 설정 파일에서만 바꾼다(커밋되지 않음)
+      - run: |
+          test -n "$R2_BUCKET" || { echo "::error::R2_BUCKET 시크릿이 비어 있음"; exit 1; }
+          sed -i "s/replace-with-r2-bucket/$R2_BUCKET/" wrangler.jsonc
+          grep -q replace-with-r2-bucket wrangler.jsonc && { echo "::error::wrangler.jsonc 에 버킷 자리 표시값이 남아 있음"; exit 1; }
+          npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}

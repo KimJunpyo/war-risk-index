@@ -1,0 +1,14 @@
+// 타입 검사: npx wrangler types && npx tsc. worker-configuration.d.ts(Workers 런타임 타입)는 생성물이라 커밋하지 않는다
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["worker-configuration.d.ts", "src", "test"]
+}

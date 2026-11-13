@@ -20,8 +20,8 @@ KEY_NAME = "DATA_GO_KR_SERVICE_KEY"
 ENDPOINTS = ["/api/pairs", "/api/countries", "/api/live"]
 # serviceKey 실제 값 모양: 영숫자 또는 %XX 인코딩 문자가 32자 이상 연속
 KEY_LIKE = re.compile(rb"(?:[A-Za-z0-9]|%[0-9A-Fa-f]{2}){32,}")
-# package-lock.json 의 integrity(sha512 base64) 해시가 444건 걸림. 비밀값이 아니라 패키지 검증용 공개 해시
-KEY_SCAN_EXCLUDED = {"frontend/package-lock.json"}
+# package-lock.json 의 integrity(sha512 base64) 해시가 걸림(frontend 444건, worker 도 같음). 비밀값이 아니라 패키지 검증용 공개 해시
+KEY_SCAN_EXCLUDED = {"frontend/package-lock.json", "worker/package-lock.json"}
 SUBPROCESS_TIMEOUT = 120
 
 # 별도 파이썬에서 실행: lifespan 까지 타도록 with TestClient 사용(LIVE_UPDATES=0 이라 수집 스레드는 안 뜸)
