@@ -18,3 +18,9 @@ out/
 # 로컬 도구 설정
 .claude/settings.local.json
 .pytest_cache/
+
+# Worker: 의존성·wrangler 로컬 상태, wrangler types 생성물, npm run deploy 의 치환 설정(실제 버킷 이름이 들어감)
+worker/node_modules/
+worker/.wrangler/
+worker/worker-configuration.d.ts
+worker/wrangler.deploy.jsonc

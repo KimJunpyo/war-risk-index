@@ -1,0 +1,16 @@
+{
+  "name": "war-risk-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "deploy": "node -e \"const fs = require('fs'), b = process.env.R2_BUCKET; if (b) fs.writeFileSync('wrangler.deploy.jsonc', fs.readFileSync('wrangler.jsonc', 'utf8').replaceAll('replace-with-r2-bucket', b)); else throw new Error('R2_BUCKET 환경변수가 비어 있음')\" && wrangler deploy --config wrangler.deploy.jsonc"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.8.1",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0",
+    "wrangler": "4.161.0"
+  }
+}
