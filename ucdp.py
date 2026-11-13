@@ -9,6 +9,7 @@ import re
 import shutil
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +24,7 @@ GED_PATTERN = r"https://ucdp\.uu\.se/downloads/ged/ged\d+-csv\.zip"
 # 올해 누적 후보판: GEDEvent_v26_01_26_09.csv (26년 1월~9월)
 CANDIDATE_PATTERN = r"https://ucdp\.uu\.se/downloads/candidateged/GEDEvent_v\d+_01_\d+_\d+\.csv"
 COLUMNS = ["id", "type_of_violence", "country", "date_start", "date_end", "best", "side_a", "side_b"]
+TEXT_COLUMNS = ["country", "date_start", "date_end", "side_a", "side_b"]  # 문자열로 읽는 열. 숫자 열은 추론에 맡긴다
 OPPONENT_FILE = Path("data/ucdp_opponents_monthly.csv")
 GOV_PREFIX = "Government of "
 UNKNOWN_PREFIX = "XXX"  # UCDP 의 신원 미상 행위자 코드
@@ -66,9 +68,11 @@ def opponents(events: pd.DataFrame) -> pd.DataFrame:
     한 사건에 상대가 여럿이면 사망자를 각 상대에 모두 붙인다(상대 순위용이라 합계에 쓰지 않음).
     """
     e = events[events["type_of_violence"] == 1].drop_duplicates("id", keep="last")
+    # 사망자는 더하기만 하므로 같은 (양측, 월, 나라) 사건을 먼저 합쳐 아래 루프를 줄인다(사건마다 돈 결과와 같음)
+    e = (e.assign(month=e["date_start"].map(lambda s: str(s)[:7]))
+         .groupby(["side_a", "side_b", "month", "country"], dropna=False)["best"].sum().reset_index())
     rows = []
-    for a, b, start, deaths, where in zip(e["side_a"], e["side_b"], e["date_start"], e["best"], e["country"]):
-        month = str(start)[:7]
+    for a, b, month, deaths, where in zip(e["side_a"], e["side_b"], e["month"], e["best"], e["country"]):
         sa, sb = _parties(a), _parties(b)
         for us, them in ((sa, sb), (sb, sa)):
             for gov in filter(None, map(_gov_iso3, us)):
@@ -112,6 +116,23 @@ def aggregate(events: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _read_events(path: Path) -> pd.DataFrame:
+    """GED 파일 → 사건 표(COLUMNS 열). zip(확정판)은 zipfile 로 연 핸들을 넘긴다.
+
+    zip 경로를 그대로 넘기면 pandas 가 압축(풀면 261MB)을 통째로 풀고, low_memory=False 는 49열을 한 번에 토큰화해
+    월 1회 재집계의 최대 메모리가 1GB 를 넘었다(#47).
+    """
+    dtype = dict.fromkeys(TEXT_COLUMNS, str)
+    if path.suffix != ".zip":
+        return pd.read_csv(path, usecols=COLUMNS, dtype=dtype)
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist() if n.lower().endswith(".csv")]
+        if len(names) != 1:
+            raise ValueError(f"{path}: zip 안 CSV 가 1개가 아님 {names}")
+        with z.open(names[0]) as f:
+            return pd.read_csv(f, usecols=COLUMNS, dtype=dtype)
+
+
 def update(force: bool = False) -> bool:
     """새 버전 파일이 있으면 받아서 월별 집계를 다시 만든다. 갱신했으면 True."""
     UCDP_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,7 +151,7 @@ def update(force: bool = False) -> bool:
                 raise urllib.error.ContentTooShortError(f"{u}: {size} 바이트 중 {f.tell()} 바이트만 받음", (str(tmp), r.headers))
         tmp.replace(p)  # 파일을 닫은 뒤 교체(Windows 는 열린 파일을 교체하지 못함)
     # 확정판 먼저, 후보판 나중 (같은 id 는 후보판 값 사용)
-    events = pd.concat([pd.read_csv(p, usecols=COLUMNS, low_memory=False) for p in paths], ignore_index=True)
+    events = pd.concat([_read_events(p) for p in paths], ignore_index=True)
     out = aggregate(events)
     atomic_write.write_csv(out, MONTHLY_FILE, index=False, encoding="utf-8")
     atomic_write.write_csv(opponents(events), OPPONENT_FILE, index=False, encoding="utf-8")
