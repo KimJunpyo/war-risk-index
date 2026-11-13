@@ -9,6 +9,7 @@
 import json
 import math
 from collections.abc import Iterator
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -187,3 +188,33 @@ def test_write_removes_stale_files(tmp_path: Path) -> None:
 def test_tile_key_floor() -> None:
     assert publish.tile_key(37.5, 127.0) == "375_1270"
     assert publish.tile_key(37.49, 126.99) == "374_1269"
+
+
+def test_write_refuses_to_drop_public_data(tmp_path: Path) -> None:
+    """키 누락·상태 동기화 실패로 공공데이터가 빠지면, 이미 쓴 available=true 응답과 타일을 지우지 않고 멈춘다."""
+    publish.write({"shelters/meta.json": {"available": True, "as_of": "2026-11-13"},
+                   "shelters/tiles/1_2.json": []}, tmp_path)
+    with pytest.raises(RuntimeError, match="shelters/meta.json"):
+        publish.write({"shelters/meta.json": {"available": False, "as_of": None}}, tmp_path)
+    assert _files(tmp_path) == ["shelters/meta.json", "shelters/tiles/1_2.json"]
+    assert _load(tmp_path, "shelters/meta.json")["available"] is True
+
+
+EMBASSY_ITEM = {"country_iso_alp2": "JP", "embassy_kor_nm": "주일본 대사관", "embassy_ty_cd": "10",
+                "embassy_ty_cd_nm": "대사관", "emblgbd_addr": "Tokyo", "tel_no": "1", "urgency_tel_no": "2"}
+
+
+@pytest.mark.parametrize(("collected_days_ago", "fetched"), [(1, True), (0, False)])
+def test_embassy_refresh_by_collected_date(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                           collected_days_ago: int, fetched: bool) -> None:
+    """복사·복원으로 mtime 이 방금이어도 수집일(KST)이 오늘 전이면 다시 받고, 오늘이면 받지 않는다."""
+    path = tmp_path / "embassies.csv"
+    collected = (datetime.now(embassies.KST) - timedelta(days=collected_days_ago)).strftime("%Y-%m-%d")
+    path.write_text(f"iso2,name,{embassies.COLLECTED_COLUMN}\nJP,x,{collected}\n", encoding="utf-8")  # mtime = 지금
+    monkeypatch.setattr(embassies, "EMBASSY_FILE", path)
+    monkeypatch.setattr(embassies, "_last_failure", 0.0)
+    monkeypatch.setenv(KEY_ENV, "test-key")
+    calls: list[str] = []
+    monkeypatch.setattr(embassies.data_go_kr, "fetch_all", lambda url, *_: calls.append(url) or [EMBASSY_ITEM])
+    assert embassies.update() is fetched
+    assert bool(calls) == fetched

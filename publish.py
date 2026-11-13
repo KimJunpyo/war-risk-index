@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import atomic_write
+import data_go_kr
 from backend.app import main
 from backend.app.pairs import PAIRS
 
@@ -84,8 +85,25 @@ def build() -> dict[str, Any]:
     return out
 
 
+def _lost_public_data(payloads: dict[str, Any], out_dir: Path) -> list[str]:
+    """이미 쓴 파일은 available=true 인데 이번 응답은 false 인 경로(대피소 메타·지역 목록·공관).
+
+    키 누락이나 상태 동기화 실패로 공공데이터를 못 읽은 경우다. 그대로 쓰면 지난 응답과 대피소 타일·지역 파일이 지워진다.
+    """
+    return [rel for rel, payload in payloads.items()
+            if isinstance(payload, dict) and payload.get("available") is False and (out_dir / rel).exists()
+            and json.loads((out_dir / rel).read_text(encoding="utf-8")).get("available") is True]
+
+
 def write(payloads: dict[str, Any], out_dir: Path = OUT_DIR) -> None:
-    """응답 객체를 JSON 파일로 원자적으로 쓰고, 이번에 만들지 않은 옛 파일(사라진 타일·지역 등)은 지운다."""
+    """응답 객체를 JSON 파일로 원자적으로 쓰고, 이번에 만들지 않은 옛 파일(사라진 타일·지역 등)은 지운다.
+
+    공공데이터가 빠진 응답으로 지난 응답을 덮게 되면 아무것도 쓰지 않고 멈춘다(조용히 지우지 않고 배치를 실패시킴).
+    """
+    lost = _lost_public_data(payloads, out_dir)
+    if lost:
+        raise RuntimeError(f"공공데이터가 빠져 지난 응답을 지우게 됨: {lost[0]} 외 {len(lost) - 1}개. "
+                           f"{data_go_kr.KEY_ENV}·data/ 파일을 확인하고, 일부러 끈 것이면 {out_dir} 의 해당 파일을 지운 뒤 다시 실행")
     for rel, payload in payloads.items():
         path = out_dir / rel
         path.parent.mkdir(parents=True, exist_ok=True)
