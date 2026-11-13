@@ -6,6 +6,7 @@
 
 import html
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -15,10 +16,13 @@ import data_go_kr
 EMBASSY_URL = "https://apis.data.go.kr/1262000/EmbassyService2/getEmbassyList2"
 EMBASSY_FILE = Path("data/embassies.csv")
 PAGE_SIZE = 100
-REFRESH_SECONDS = 20 * 3600  # 파일이 이보다 새로우면 다시 받지 않음(하루 1회)
+REFRESH_SECONDS = 20 * 3600  # 수집일 열이 없는 예전 파일만: mtime 이 이보다 새로우면 다시 받지 않음
 RETRY_SECONDS = 6 * 3600  # 실패 뒤 이 시간 동안은 재수신하지 않음(15분 주기 갱신 루프 대비)
 EMBASSY_TYPE_CODE = "10"  # embassy_ty_cd: 10 대사관, 20 총영사관 등
 COLUMNS = ["iso2", "name", "kind", "kind_cd", "address", "tel", "emergency_tel"]
+# 수집일(KST) 열. 표시 날짜와 재수신 판단(하루 1회)에 쓴다. 파일 mtime 은 복사·복원(배치 환경)하면 바뀌고 시간대도 달라 쓰지 않는다
+COLLECTED_COLUMN = "collected"
+KST = timezone(timedelta(hours=9))
 # 영사콜센터 (출처 https://www.0404.go.kr, 확인일 2026-11-09)
 CALL_CENTER = {"tel": "02-3210-0404", "tel_overseas": "+82-2-3210-0404", "source": "https://www.0404.go.kr"}
 # 원문 오류로 알려진 행 (나라, 공관명, 주소에 든 글자). 주 멕시코 대사관 이름으로 아바나(쿠바) 주소·전화가 옴(2026-11-09).
@@ -48,6 +52,16 @@ def parse(items: list[dict]) -> pd.DataFrame:
     return df.sort_values(["iso2", "_order", "name"]).drop(columns="_order").reset_index(drop=True)
 
 
+def _collected_today() -> bool:
+    """오늘(KST) 받은 파일이면 True. 수집일 열이 없는 예전 파일만 mtime 으로 본다."""
+    if not EMBASSY_FILE.exists():
+        return False
+    df = pd.read_csv(EMBASSY_FILE, dtype=str, keep_default_na=False, usecols=lambda c: c == COLLECTED_COLUMN)
+    if COLLECTED_COLUMN in df:
+        return len(df) > 0 and df[COLLECTED_COLUMN].max() >= datetime.now(KST).strftime("%Y-%m-%d")
+    return time.time() - EMBASSY_FILE.stat().st_mtime < REFRESH_SECONDS
+
+
 def update(force: bool = False) -> bool:
     """하루 1회 받아 저장. 키 없으면 False(호출·쓰기 없음). 실패는 예외로 올리고 기존 파일은 그대로."""
     global _last_failure, _warned_no_key
@@ -56,7 +70,7 @@ def update(force: bool = False) -> bool:
             print(f"재외공관: {data_go_kr.KEY_ENV} 없음, 건너뜀")
             _warned_no_key = True
         return False
-    if not force and EMBASSY_FILE.exists() and time.time() - EMBASSY_FILE.stat().st_mtime < REFRESH_SECONDS:
+    if not force and _collected_today():
         return False
     if not force and time.time() - _last_failure < RETRY_SECONDS:
         return False
@@ -68,6 +82,7 @@ def update(force: bool = False) -> bool:
     except Exception:
         _last_failure = time.time()
         raise
+    df = df.assign(**{COLLECTED_COLUMN: datetime.now(KST).strftime("%Y-%m-%d")})
     EMBASSY_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = EMBASSY_FILE.with_suffix(".csv.part")
     df.to_csv(tmp, index=False, encoding="utf-8")

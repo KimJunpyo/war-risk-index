@@ -6,6 +6,9 @@ __pycache__/
 # 수집 데이터·산출물 (수집 스크립트로 재생성)
 data/
 out/
+# 테스트 픽스처는 예외 (tests/fixtures/m12/make_fixture.py 로 만든 작은 사본)
+!tests/fixtures/**/data/
+!tests/fixtures/**/out/
 
 # 비밀값
 .env

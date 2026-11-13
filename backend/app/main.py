@@ -389,19 +389,27 @@ def country_index(code: str) -> list[dict]:
     return _records(rows)
 
 
-@app.get("/api/countries/{code}/catalysts")
-def country_catalysts(code: str, days: int = Query(90, ge=1, le=365)) -> dict:
-    _country_or_404(code)
+def country_catalyst_rows() -> pd.DataFrame:
+    """전체 나라 촉매 행: 일별 파일 + 일별 파일이 아직 없는 날(오늘·어제)의 15분 실시간 슬롯."""
     hist = _csv(CATALYST_ALL_FILE, dtype={"key": str}, keep_default_na=False)
     recent = _csv(ROOT / live.CAT_LIVE, dtype={"key": str}, keep_default_na=False)
-    # 일별 파일이 아직 없는 날(오늘·어제)은 15분 실시간 슬롯으로 채움
     if len(recent) and len(hist):
         recent = recent[recent["key"].str[:8] > hist["key"].max()]
-    cat = pd.concat([hist, recent], ignore_index=True)
+    return pd.concat([hist, recent], ignore_index=True)
+
+
+def country_catalyst_response(cat: pd.DataFrame, code: str, days: int) -> dict:
+    """cat(country_catalyst_rows 전체 또는 그 일부)에서 code 가 src·dst 인 행의 촉매 응답."""
     cat = cat[(cat["src"] == code) | (cat["dst"] == code)] if len(cat) else cat
     if cat.empty:
         return {"events": [], "daily": []}
     return _catalyst_response(cat, days)
+
+
+@app.get("/api/countries/{code}/catalysts")
+def country_catalysts(code: str, days: int = Query(90, ge=1, le=365)) -> dict:
+    _country_or_404(code)
+    return country_catalyst_response(country_catalyst_rows(), code, days)
 
 
 @app.get("/api/countries/{code}/news")
@@ -489,14 +497,20 @@ def shelter_regions() -> dict:
 
 # ---------- 재외공관·영사콜센터 ----------
 
+def _embassy_as_of(df: pd.DataFrame, path: Path) -> str:
+    """수집일(KST). 수집일 열이 없는 예전 파일만 파일 mtime 으로 대신한다(다음 갱신 때 열이 생김)."""
+    if embassies.COLLECTED_COLUMN in df:
+        return df[embassies.COLLECTED_COLUMN].max()
+    return datetime.fromtimestamp(_mtime(path), embassies.KST).strftime("%Y-%m-%d")
+
+
 @app.get("/api/countries/{code}/embassies")
 def country_embassies(code: str) -> dict:
     """나라의 대한민국 재외공관(대사관 먼저)과 영사콜센터. 키·파일 없음·KOR 이면 공관은 빈 목록."""
     _country_or_404(code)
     path = ROOT / embassies.EMBASSY_FILE
     df = _csv(path, dtype=str, keep_default_na=False) if data_go_kr.service_key() else pd.DataFrame()
-    out = {"available": not df.empty,
-           "as_of": time.strftime("%Y-%m-%d", time.localtime(_mtime(path))) if len(df) else None,  # 수집일
+    out = {"available": not df.empty, "as_of": _embassy_as_of(df, path) if len(df) else None,
            "call_center": embassies.CALL_CENTER, "embassies": []}
     iso2 = _iso2(code)
     if df.empty or not iso2 or code == "KOR":
@@ -520,14 +534,19 @@ def _max_or_none(df: pd.DataFrame, column: str) -> str | None:
     return None if pd.isna(value) else value
 
 
+def freshness() -> tuple[str | None, str | None]:
+    """(최신 실시간 슬롯 key, 일별 지수 최신 날짜). /api/health 와 publish.py 의 status.json 이 같이 쓴다."""
+    live_as_of = _max_or_none(_csv(ROOT / live.COUNTRY_LIVE, dtype={"key": str}), "key")  # = /api/live 의 as_of
+    return live_as_of, _max_or_none(_meta(), "date")
+
+
 @app.get("/api/health")
 @app.head("/api/health")  # HEAD 로 확인하는 감시 서비스용(GET 만 등록하면 405). api_route 는 두 메서드에 같은 operationId 를 붙임
 def health() -> JSONResponse:
     """최신 실시간 슬롯이 LIVE_STALE_MINUTES 분, 일별 지수 날짜가 INDEX_STALE_DAYS 일 이내면 200, 아니면 503.
     파일·값이 없으면 그 파일의 두 필드는 null 이고 503. LIVE_UPDATES=0 이어도 같은 기준이다."""
     now = _utcnow()
-    live_as_of = _max_or_none(_csv(ROOT / live.COUNTRY_LIVE, dtype={"key": str}), "key")  # = /api/live 의 as_of
-    index_date = _max_or_none(_meta(), "date")
+    live_as_of, index_date = freshness()
     live_age = index_age = None
     if live_as_of is not None:  # 슬롯 key 는 UTC 시각
         slot = datetime.strptime(live_as_of, live.KEY_FORMAT).replace(tzinfo=timezone.utc)

@@ -1,0 +1,12 @@
+{
+  "w1": 0.435,
+  "w2": 0.565,
+  "rho": 0.845,
+  "noise1": 0.174,
+  "noise2": 0.134,
+  "signal": 0.842,
+  "median_corr": 0.868,
+  "entities": 92,
+  "overlap_days": 180,
+  "estimated": true
+}

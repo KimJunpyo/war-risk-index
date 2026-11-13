@@ -1,0 +1,22 @@
+iso3,source,level,label,date,summary,url
+IRN,us_state,4,Do Not Travel,2026-10-22,"Do not travel to Iran due to the risk of terrorism, unrest, kidnapping, arbitrary arrest of U.S.",https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.irn.html
+IRN,uk_fcdo,4,전역 모든 여행 자제 권고,2026-10-27,Updated information about Regional tensions (‘Warnings and insurance’ page),https://www.gov.uk/foreign-travel-advice/iran
+IRN,kr_mofa,4,여행금지,,전 지역,https://www.0404.go.kr/
+ISR,us_state,3,Reconsider Travel,2026-10-22,Reconsider travel to Israel due to terrorism and unrest.,https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.isr.html
+ISR,uk_fcdo,2,일부 지역 모든 여행 자제 권고 · 일부 지역 필수 외 여행 자제 권고,2026-10-27,Updated information about Regional tensions (‘Warnings and insurance’ page),https://www.gov.uk/foreign-travel-advice/israel
+ISR,kr_mofa,4,여행금지,,"일부 지역: 이스라엘 북부 레바논 접경지역(국경으로부터 4km), 가자지구",https://www.0404.go.kr/
+JPN,us_state,1,Exercise Normal Precautions,2025-05-14,Exercise normal precaution in Japan.,https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.jpn.html
+JPN,uk_fcdo,1,경보 없음,2026-08-28,Addition of information about flooding and heavy rain ('Safety and security' page).,https://www.gov.uk/foreign-travel-advice/japan
+JPN,kr_mofa,3,출국권고,,일부 지역: 후쿠시마 원전 반경 30km 이내 및 일본 정부 지정 피난지시구역,https://www.0404.go.kr/
+KOR,us_state,1,Exercise Normal Precautions,2025-05-27,Exercise normal precaution in the Republic of Korea (ROK or South Korea).,https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.kor.html
+KOR,uk_fcdo,1,경보 없음,2026-05-14,Updated information about submitting e-Arrivals cards when arriving in Korea (‘Entry requirements’ page).,https://www.gov.uk/foreign-travel-advice/south-korea
+PRK,us_state,4,Do Not Travel,2025-04-28,Do not travel to North Korea due to wrongful detention and other risks.,https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.prk.html
+PRK,uk_fcdo,3,전역 필수 외 여행 자제 권고,2025-12-10,New information about dual nationals returning to the UK (‘Entry requirements’ page).,https://www.gov.uk/foreign-travel-advice/north-korea
+RUS,us_state,4,Do Not Travel,2025-12-28,"Do not travel to Russia for any reason due to terrorism, unrest, wrongful detention and other risks.",https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.rus.html
+RUS,uk_fcdo,4,전역 모든 여행 자제 권고,2026-09-18,Updated information about drone attacks leading to short-notice restrictions on airspace use and airport operations (‘Warnings and insurance’ and ‘Safety and security’ pages).,https://www.gov.uk/foreign-travel-advice/russia
+RUS,kr_mofa,4,여행금지,,일부 지역: 우크라이나 접경지역(쿠르스크주 전체 및 로스토프&middot;벨고로드&middot;보로네시&middot;브랸스크 지역 내 우크라이나 국경에서 30km 구간),https://www.0404.go.kr/
+UKR,us_state,4,Do Not Travel,2026-08-27,Do not travel to Ukraine for any reason due to the Russia-Ukraine war.,https://travel.state.gov/content/tsg_aem/us/en/home/international-travel/travel-advisories/destination.ukr.html
+UKR,uk_fcdo,2,일부 지역 모든 여행 자제 권고 · 일부 지역 필수 외 여행 자제 권고,2026-10-02,Updated information about the Russian invasion of Ukraine ('Warnings and insurance' page).,https://www.gov.uk/foreign-travel-advice/ukraine
+UKR,kr_mofa,4,여행금지,,전 지역,https://www.0404.go.kr/
+USA,uk_fcdo,1,경보 없음,2026-10-30,Updated information about Ebola (‘Entry requirements’ page).,https://www.gov.uk/foreign-travel-advice/usa
+USA,kr_mofa,1,여행유의,,일부 지역: 하와이 제외한 지역,https://www.0404.go.kr/
