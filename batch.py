@@ -237,10 +237,22 @@ def backup() -> None:
         _aws("s3", "rm", f"s3://{bucket}/{BACKUP_PREFIX}{day}/", "--recursive")
 
 
+def check_backup(folder: Path) -> list[str]:
+    """받아 둔 백업 폴더(<폴더>/manifest.json, <폴더>/state/…)를 manifest 의 sha256 과 대조해 다른 state/ 키를 돌려준다.
+
+    복원 리허설용(런북 6절): 운영 state/ 를 건드리지 않고 백업이 온전한지 본다. 내용이 다른 파일·빠진 파일·
+    manifest 에 없는 파일을 모두 센다. manifest 의 api/ 항목은 백업 대상이 아니라 보지 않는다.
+    """
+    manifest: Manifest = json.loads((folder / MANIFEST_KEY).read_text(encoding="utf-8"))
+    want = {k: v["sha256"] for k, v in manifest.items() if k.startswith(STATE_PREFIX)}
+    got = {k: v["sha256"] for k, v in build_manifest(folder / STATE_PREFIX.rstrip("/")).items()}
+    return sorted(k for k in want.keys() | got.keys() if want.get(k) != got.get(k))
+
+
 def run(sync: bool = True) -> int:
     """배치 한 번. 종료 코드를 돌려준다: 0 성공, 1 실패.
 
-    단계 실패는 main._updater 와 같이 기록하고 다음 단계로 가며, 올리기까지 마친 뒤 1 을 돌려준다.
+    단계 실패는 기록하고 다음 단계로 가며, 올리기까지 마친 뒤 1 을 돌려준다.
     받기가 실패하면 아무것도 돌리지 않는다. 덜 받은 상태로 돌고 올리면 R2 의 상태를 덮어쓰고 응답(api/)을 지우게 된다.
     """
     global _aws_calls
@@ -256,7 +268,7 @@ def run(sync: bool = True) -> int:
         except Exception:
             log.exception("R2 받기 실패: 아무것도 돌리지 않고 끝냄")
             return 1
-    # shortcut: _daily_refresh 는 아직 main.py 에 있다(_updater 도 부름), #55 에서 스레드를 지울 때 이 모듈로 옮길 것
+    # shortcut: _daily_refresh 는 아직 main.py 에 있다(이제 이 배치만 부른다). 옮길 때 테스트의 main._daily_refresh 참조도 함께 옮길 것
     steps = {"live.update": live.update, "_daily_refresh": main._daily_refresh,
              "publish.run": lambda: publish.run(ROOT / API_DIR),
              "news_publish.run": lambda: news_publish.run(ROOT / API_DIR)}
@@ -268,7 +280,7 @@ def run(sync: bool = True) -> int:
             continue
         try:
             job()
-        except Exception:  # 한 단계 실패가 다음 단계와 올리기를 막지 않도록(_updater 와 같음)
+        except Exception:  # 한 단계 실패가 다음 단계와 올리기를 막지 않도록
             log.exception("갱신 실패: %s", name)
             failed.append(name)
     if sync:
@@ -291,6 +303,12 @@ def run(sync: bool = True) -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="15분 배치: R2 받기 → 갱신 → 응답 생성 → R2 올리기")
     parser.add_argument("--no-sync", action="store_true", help="R2 받기·올리기 없이 로컬 data/·out/ 만으로 돈다")
+    parser.add_argument("--check-backup", metavar="폴더", type=Path,
+                        help="받아 둔 백업 폴더를 manifest 와 대조만 하고 끝낸다(복원 리허설. R2 는 건드리지 않는다)")
     args = parser.parse_args()
+    if args.check_backup:
+        diff = check_backup(args.check_backup)
+        print(f"백업 대조: 다른 키 {len(diff)}개" + (f"({', '.join(diff[:5])} 등)" if diff else ", 모두 같음"))
+        sys.exit(1 if diff else 0)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     sys.exit(run(sync=not args.no_sync))

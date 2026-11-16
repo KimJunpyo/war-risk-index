@@ -19,7 +19,7 @@
     사이트 막힘·시간 초과(OSError 계열)만이 아니라 모든 Exception 을 받는다. 파일 형식이 바뀌어 읽기에 실패해도 같다.
 - 그래서 UCDP 실패는 _daily_refresh 밖으로 나오지 않는다.
 - 나머지 네 단계의 실패 처리는 격리 전과 같다: 감싸지 않고 그 예외 객체를 그대로 올리며, 실패한 단계 뒤는 부르지 않는다.
-  _daily_refresh 는 그 실패를 기록하지 않는다(_updater 가 받아 "갱신 실패: _daily_refresh" 로 기록한다).
+  _daily_refresh 는 그 실패를 기록하지 않는다(batch.run 이 받아 "갱신 실패: _daily_refresh" 로 기록한다).
 - UCDP 가 정상이면 격리 전과 같다: 다섯 단계가 순서대로 한 번씩 불리고 오류 기록이 없다.
 
 테스트 방식
@@ -151,7 +151,7 @@ def test_no_step_without_new_daily_file(steps: Steps, monkeypatch: pytest.Monkey
 @pytest.mark.parametrize("failing", LATER_STEPS)
 def test_other_step_failure_propagates(steps: Steps, caplog: pytest.LogCaptureFixture, failing: str,
                                        error_type: type[Exception]) -> None:
-    """UCDP 뒤 네 단계의 실패는 격리 전처럼 감싸지 않는다: 그 예외 객체가 _daily_refresh 밖으로 나오고(_updater 가 받음),
+    """UCDP 뒤 네 단계의 실패는 격리 전처럼 감싸지 않는다: 그 예외 객체가 _daily_refresh 밖으로 나오고(batch.run 이 받음),
     실패한 단계 뒤는 불리지 않으며, _daily_refresh 는 오류 기록을 남기지 않는다."""
     calls, failures = steps
     error = error_type(f"가짜 {failing} 실패")

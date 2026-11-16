@@ -24,7 +24,7 @@ test_m12_news.py), 배치와 이어지는 부분(순서·news/* 받기·올리�
   그날(batch._today(), KST) backup/<날짜>/manifest.json 이 없으면 state/ → backup/<날짜>/state/ 를 R2 안에서 sync --delete 하고
   manifest.json 을 맨 나중에 cp 한다. 날짜 백업(접두사)은 BACKUP_KEEP 개만 남기고 오래된 것부터 s3 rm --recursive 한다.
   올리기가 실패하면 백업하지 않는다. 백업이 실패하면 기록하고 종료 코드 1.
-- 단계 실패는 main._updater 처럼 기록하고 다음 단계·올리기로 간다. 실패가 있으면 종료 코드 1.
+- 단계 실패는 기록하고 다음 단계·올리기로 간다. 실패가 있으면 종료 코드 1.
 - 모든 aws 호출: --endpoint-url $R2_ENDPOINT_URL --region auto, 환경에 체크섬 변수 2개(when_required),
   subprocess.run 의 timeout=batch.AWS_TIMEOUT_SECONDS. 넘기면 실패로 친다.
   출력·로그에 엔드포인트(URL 전체와 호스트), 키 ID, 비밀 키를 남기지 않는다(시간 초과 때의 명령줄 포함).
@@ -471,7 +471,7 @@ def test_run_uploads_only_changes(aws: FakeAws, runner: Path, tmp_path: Path, mo
 
 def test_step_failure_continues(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                 caplog: pytest.LogCaptureFixture) -> None:
-    """한 단계가 실패해도 _updater 처럼 기록하고 다음 단계와 올리기를 한다. 실패가 있었으니 종료 코드 1."""
+    """한 단계가 실패해도 기록하고 다음 단계와 올리기를 한다. 실패가 있었으니 종료 코드 1."""
     _seed(aws, tmp_path)
     steps = _fake_steps(monkeypatch)
 
@@ -623,3 +623,22 @@ def test_backup_failure_fails_run(aws: FakeAws, runner: Path, tmp_path: Path, mo
     assert aws.bucket["state/data/live/country_15min.csv"] == NEW_LIVE.encode()
     text = capsys.readouterr().out + caplog.text
     assert "R2 백업" in text and not any(secret in text for secret in HIDDEN)
+
+
+def test_check_backup(tmp_path: Path) -> None:
+    """받아 둔 백업 폴더(manifest.json, state/…)를 manifest 의 sha256 과 대조한다(복원 리허설, 런북).
+    내용이 다른 파일·빠진 파일·manifest 에 없는 파일을 모두 돌려주고, manifest 의 api/ 항목은 보지 않는다."""
+    vm = tmp_path / "vm"
+    for rel, text in STATE_FILES.items():
+        _write(vm, rel, text)
+    state = {k: v for k, v in batch.build_manifest(vm).items() if k.startswith("state/")}
+    folder = tmp_path / "backup"
+    _put(folder / "manifest.json", json.dumps({**state, "api/pairs.json": {"sha256": "0", "mtime": 0}}).encode())
+    for key in state:
+        _put(folder / key, (vm / key.removeprefix("state/")).read_bytes())
+    assert batch.check_backup(folder) == []
+    _put(folder / "state/data/travel_advisory.csv", b"changed")
+    (folder / "state/out/country_meta.csv").unlink()
+    _put(folder / "state/data/extra.csv", b"x")
+    assert batch.check_backup(folder) == ["state/data/extra.csv", "state/data/travel_advisory.csv",
+                                          "state/out/country_meta.csv"]
