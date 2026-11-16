@@ -17,6 +17,8 @@
   // GitHub 예약 실행이 대부분 빠져서(#52) 15분마다 갱신 워크플로를 수동 실행으로 부른다(refresh.yml 의 cron 과 같은 시각, UTC).
   // 토큰은 worker 폴더에서 npx wrangler secret put GITHUB_DISPATCH_TOKEN 으로 넣는다(배포와 따로 남는다)
   "triggers": { "crons": ["7,22,37,52 * * * *"] },
+  // Workers Logs 를 끈다. 켜면 요청 URL(대피소 좌표 검색의 위치)이 남는다(#54). 실시간 확인은 wrangler tail 로 한다
+  "observability": { "enabled": false },
   "vars": {
     // 쉼표로 구분한 허용 출처(backend/app/main.py 의 CORS_ORIGINS 와 같은 뜻). Vercel 주소는 #55 에서 넣는다
     "CORS_ORIGINS": "http://localhost:3000"

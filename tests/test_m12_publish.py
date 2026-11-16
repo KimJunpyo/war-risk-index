@@ -25,9 +25,11 @@ from backend.app import main
 
 KEY_ENV = main.DATA_GO_KR_SERVICE_KEY
 FIX = Path(__file__).resolve().parent / "fixtures" / "m12"
-# 대표 좌표: 서울 도심·부산·타일 경계(정확히 0.1° 선, 픽스처 구역 가장자리)·제주(픽스처에 시설 없음)·범위 밖
-POINTS = [("37.57", "126.98"), ("35.18", "129.08"), ("37.6", "127"), ("33.5", "126.53"), ("40", "127")]
-NONEMPTY = POINTS[:3]  # 키가 있으면 반경 안 시설이 있어야 하는 좌표
+# 대표 좌표: 서울 도심·부산·타일 경계(정확히 0.1° 선, 픽스처 구역 가장자리)·
+# 사각형 아래·왼쪽 변(y-dy, x-dx)이 0.1° 선을 약 0.005° 넘는 좌표(그 줄·칸의 시설 4곳이 반경 안)·제주(픽스처에 시설 없음)·범위 밖
+POINTS = [("37.57", "126.98"), ("35.18", "129.08"), ("37.6", "127"), ("35.24", "129.15"), ("33.5", "126.53"),
+          ("40", "127")]
+NONEMPTY = POINTS[:4]  # 키가 있으면 반경 안 시설이 있어야 하는 좌표
 FIXTURE_COLLECTED = "2026-11-13"  # make_fixture.COLLECTED
 # main 이 import 때 ROOT 로 만들어 두는 경로. 나머지는 요청 때 main.ROOT / <모듈 상수> 로 만든다
 IMPORT_TIME_PATHS = {"INDEX_FILE": "out/index_v1.csv", "CATALYST_FILE": "data/gdelt_catalyst.csv",
@@ -186,8 +188,8 @@ def test_write_removes_stale_files(tmp_path: Path) -> None:
 
 
 def test_tile_key_floor() -> None:
-    assert publish.tile_key(37.5, 127.0) == "375_1270"
-    assert publish.tile_key(37.49, 126.99) == "374_1269"
+    assert publish.tile_key(37.5, 127.0) == "750_2540"
+    assert publish.tile_key(37.49, 126.99) == "749_2539"
 
 
 def test_write_refuses_to_drop_public_data(tmp_path: Path) -> None:

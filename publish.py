@@ -5,7 +5,7 @@ Cloudflare Worker 는 이 파일을 내주기만 한다. news 는 동적이라 �
 나중에 같은 행을 D1 에 넣을 때는 build() 결과만 쓰면 된다.
 
 대피소
-- 위치 검색: 0.1° 격자 타일 shelters/tiles/{floor(lat*10)}_{floor(lon*10)}.json. Worker 는 main.list_shelters 와 같은
+- 위치 검색: 0.05° 격자 타일 shelters/tiles/{floor(lat*20)}_{floor(lon*20)}.json. Worker 는 main.list_shelters 와 같은
   사각형 범위의 타일을 합쳐 사각형·반경 필터 → 거리순 정렬 → SHELTER_NEARBY_LIMIT 자르기를 한다.
 - 지역 검색: shelters/region/{시·도}.json, shelters/region/{시·도}/{시·군·구}.json (응답 그대로, 이름순·상한 적용).
   목록에 없는 지역은 Worker 가 shelters/meta.json 의 available·as_of 로 빈 응답을 만든다.
@@ -26,7 +26,9 @@ from backend.app.pairs import PAIRS
 
 OUT_DIR = main.ROOT / "out" / "api"
 CATALYST_DAYS = 90  # 프론트가 쓰는 기간(CatalystPanel.tsx). 이 기간 파일 하나만 만든다
-TILE_SCALE = 10  # 0.1° 격자: 키 = floor(좌표 × 10)
+# 0.05° 격자: 키 = floor(좌표 × 20). 0.1° 격자에서는 Worker 좌표 검색 CPU 가 중앙값 7ms·최대 11ms(무료 한도 10ms)라
+# 한 번에 읽는 시설 수를 줄였다(#54)
+TILE_SCALE = 20
 TILE_FIELDS = ["name", "address", "lat", "lon", "capacity", "kind"]  # distance_m 은 Worker 가 계산
 
 

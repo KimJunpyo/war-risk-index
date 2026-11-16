@@ -1,7 +1,8 @@
 /**
  * 전쟁 가능성 지수 API Worker(#53). publish.py(#50)가 만들고 batch.py(#51)가 R2 api/ 에 올린 응답 JSON 을
  * 파싱하지 않고 그대로 흘려보낸다(무료 플랜 요청당 CPU 10ms). 경로·오류 문구·health 규칙은 backend/app/main.py 와 같다.
- * news·대피소 위치·지역 검색(/api/shelters?…)은 #54 에서 만든다.
+ * 대피소 위치·지역 검색(/api/shelters?…)은 publish 의 타일·지역 파일로 main.list_shelters 와 같은 응답을 만든다(#54).
+ * news 는 아직 없다(#54).
  * Cron Trigger(scheduled)는 15분마다 갱신 워크플로(refresh.yml)를 수동 실행으로 부른다(#52).
  */
 
@@ -12,6 +13,10 @@ export interface Env {
 }
 
 type Status = { live_as_of: string | null; index_date: string | null }; // publish.build() 의 status.json
+type ShelterMeta = { available: boolean; as_of: string | null }; // publish 의 shelters/meta.json
+type ShelterList = ShelterMeta & { items: object[]; total: number }; // main.list_shelters 응답
+// publish.TILE_FIELDS: 타일 파일의 시설 항목(distance_m 은 Worker 가 계산한다)
+type Shelter = { name: string; address: string; lat: number; lon: number; capacity: number | null; kind: string };
 
 const LIVE_MAX_AGE = 60; // 15분마다 바뀌는 실시간 값이 든 응답의 Cache-Control max-age(초)
 const DAILY_MAX_AGE = 3600; // 하루 한 번 바뀌는 응답의 max-age(초)
@@ -34,6 +39,27 @@ const DISPATCH_REF = "main";
 const GITHUB_API_VERSION = "2022-11-28";
 const USER_AGENT = "war-risk-api-cron"; // GitHub API 는 User-Agent 가 없는 요청을 거부한다
 const ERROR_BODY_CHARS = 200; // 실패 로그에 남길 GitHub 응답 본문 길이
+// 대피소 검색(main.list_shelters 와 같은 값). 좌표는 소수점 2자리(약 1km)까지만 받는다(정밀 위치를 받지 않도록)
+const SHELTERS_PATH = "/api/shelters";
+const SHELTER_META_KEY = "api/shelters/meta.json";
+const COORD_PATTERN = /^-?\d{1,3}(\.\d{1,2})?$/;
+const KOREA_LAT = [33, 39];
+const KOREA_LON = [124, 132];
+const SHELTER_RADIUS_M = 5000;
+const SHELTER_NEARBY_LIMIT = 1000; // 위치 조회 안전 상한
+const METERS_PER_DEG_LAT = 111_000; // 반경 사전 필터용 근사
+const REGION_MIN_LENGTH = 2;
+const REGION_MAX_LENGTH = 40;
+const EARTH_RADIUS_M = 6371008.8; // shelters.EARTH_RADIUS_M
+const TILE_SCALE = 20; // publish.TILE_SCALE: 0.05° 격자, 타일 키 = floor(좌표 × 20)
+const DEG_TO_RAD = Math.PI / 180; // Python math.radians 와 같은 계수(x × (π/180))
+// 시·도·시·군·구에 이 글자가 있으면 R2 를 읽지 않는다(다른 키를 가리키지 못하게)
+const UNSAFE_REGION = /[/\\]|\.\.|\p{Cc}/u;
+// 결과가 있을 때만 캐시한다. 빈 결과(공공데이터가 잠시 빠졌거나 없는 지역)는 no-store 라 다음 갱신 뒤 바로 바뀐다
+const NEARBY_CACHE = `private, max-age=${DAILY_MAX_AGE}`; // 위치가 든 URL 의 응답은 공유 캐시(CDN·프록시)에 두지 않는다
+const REGION_CACHE = `public, max-age=${DAILY_MAX_AGE}`;
+// 대피소 경로의 예외는 이 문구로 바꿔 던진다. R2 오류 문구에 키(타일 = 위치)가 섞여 공통 catch 의 로그에 남지 않게
+const SHELTERS_FAILED = "대피소 조회 실패";
 
 // 경로 파라미터가 없는 응답 → max-age. R2 키는 모든 경로에서 /api/x → api/x.json 이다
 const FIXED_ROUTES = new Map([
@@ -109,6 +135,89 @@ async function health(env: Env, head: boolean): Promise<Response> {
   return json(head ? null : JSON.stringify(body), ok ? 200 : 503, NO_STORE);
 }
 
+/** shelters.haversine_m 과 같은 식의 대원 거리(m). */
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const p1 = lat1 * DEG_TO_RAD, p2 = lat2 * DEG_TO_RAD;
+  const dp = p2 - p1, dl = (lon2 - lon1) * DEG_TO_RAD;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+}
+
+/** meta.json 이 없으면 main 에서 공공데이터 키·파일이 없을 때처럼 available false. */
+async function readShelterMeta(env: Env): Promise<ShelterMeta> {
+  const object = await env.BUCKET.get(SHELTER_META_KEY);
+  return object ? object.json<ShelterMeta>() : { available: false, as_of: null };
+}
+
+/** 결과가 없을 때의 응답. 키 순서까지 main.list_shelters 와 같다. */
+function noShelters({ available, as_of }: ShelterMeta): ShelterList {
+  return { available, as_of, items: [], total: 0 };
+}
+
+/** main.list_shelters 의 좌표 분기. 반경 사각형에 걸리는 타일을 합쳐 사각형·반경으로 거르고 가까운 순으로 자른다. */
+async function nearbyShelters(env: Env, y: number, x: number): Promise<ShelterList> {
+  const meta = await readShelterMeta(env);
+  if (!meta.available || !(KOREA_LAT[0] <= y && y <= KOREA_LAT[1] && KOREA_LON[0] <= x && x <= KOREA_LON[1])) {
+    return noShelters(meta);
+  }
+  const dy = SHELTER_RADIUS_M / METERS_PER_DEG_LAT;
+  const dx = dy / Math.cos(y * DEG_TO_RAD);
+  const keys: string[] = [];
+  for (let ty = Math.floor((y - dy) * TILE_SCALE); ty <= Math.floor((y + dy) * TILE_SCALE); ty++) {
+    for (let tx = Math.floor((x - dx) * TILE_SCALE); tx <= Math.floor((x + dx) * TILE_SCALE); tx++) {
+      keys.push(`api/shelters/tiles/${ty}_${tx}.json`);
+    }
+  }
+  const tiles = await Promise.all(keys.map(async (key) => {
+    const object = await env.BUCKET.get(key);
+    return object ? object.json<Shelter[]>() : []; // 시설이 없는 칸은 파일이 없다
+  }));
+  const near = tiles.flat()
+    .filter((s) => y - dy <= s.lat && s.lat <= y + dy && x - dx <= s.lon && s.lon <= x + dx)
+    // 키 순서도 main.SHELTER_FIELDS 와 같게 만든다.
+    // shortcut: Math.round 는 .5 를 올린다(Python round 는 짝수 쪽). 계산값이 정확히 .5 일 때만 달라 그대로 둔다.
+    // 픽스처 대조가 어긋나면 짝수 반올림으로 바꾼다
+    .map((s) => ({
+      name: s.name, address: s.address, lat: s.lat, lon: s.lon,
+      distance_m: Math.round(haversineM(y, x, s.lat, s.lon)), capacity: s.capacity, kind: s.kind,
+    }))
+    .filter((s) => s.distance_m <= SHELTER_RADIUS_M) // total 은 사각형 사전 필터가 아니라 반경 안 건수
+    .sort((a, b) => a.distance_m - b.distance_m);
+  return { ...noShelters(meta), items: near.slice(0, SHELTER_NEARBY_LIMIT), total: near.length };
+}
+
+/** main.list_shelters 의 지역 분기. publish 가 지역마다 만든 응답 파일을 그대로 주고, 파일이 없는 지역은 빈 결과. */
+async function regionShelters(env: Env, region: string): Promise<Response> {
+  // main 처럼 앞뒤 공백을 떼고 첫 공백에서 시·도와 시·군·구로 나눈다(시·군·구 안의 공백은 그대로)
+  const [sido, ...rest] = region.trim().split(" ");
+  const sigungu = rest.join(" ").trim();
+  const object = [sido, sigungu].some((part) => UNSAFE_REGION.test(part)) ? null
+    : await env.BUCKET.get(`api/shelters/region/${sigungu ? `${sido}/${sigungu}` : sido}.json`);
+  if (object) return json(object.body, 200, REGION_CACHE);
+  return json(JSON.stringify(noShelters(await readShelterMeta(env))), 200, NO_STORE);
+}
+
+/**
+ * GET /api/shelters. FastAPI 처럼 쿼리 검사(lat·lon 패턴, region 길이)가 먼저이고, lat·lon 이 둘 다 있으면 좌표,
+ * 아니면 region 검색이다. 요청 좌표는 로그에 남기지 않는다(이 경로에서 console 을 부르지 않는다).
+ */
+async function shelters(params: URLSearchParams, env: Env): Promise<Response> {
+  // 같은 이름이 여러 번 오면 FastAPI(Starlette)처럼 마지막 값을 쓴다
+  const [lat, lon, region] = ["lat", "lon", "region"].map((name) => params.getAll(name).at(-1) ?? null);
+  if ([lat, lon].some((v) => v !== null && !COORD_PATTERN.test(v))) {
+    return error(422, "lat·lon 은 소수점 2자리까지의 숫자만 지원함");
+  }
+  const length = region === null ? REGION_MIN_LENGTH : [...region].length; // Python len 처럼 코드 포인트로 센다
+  if (length < REGION_MIN_LENGTH || length > REGION_MAX_LENGTH) {
+    return error(422, `region 은 ${REGION_MIN_LENGTH}~${REGION_MAX_LENGTH}자만 지원함`);
+  }
+  if (lat !== null && lon !== null) {
+    const body = await nearbyShelters(env, Number(lat), Number(lon));
+    return json(JSON.stringify(body), 200, body.total ? NEARBY_CACHE : NO_STORE);
+  }
+  return region ? regionShelters(env, region) : error(422, "lat·lon 또는 region 이 필요함");
+}
+
 async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") {
@@ -118,6 +227,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (url.pathname === HEALTH_PATH) {
     const head = request.method === "HEAD";
     return head || request.method === "GET" ? health(env, head) : error(405, METHOD_NOT_ALLOWED);
+  }
+  if (url.pathname === SHELTERS_PATH) {
+    if (request.method !== "GET") return error(405, METHOD_NOT_ALLOWED);
+    // 원래 오류(R2 문구에 타일 키가 섞일 수 있다)는 버린다. 공통 catch 가 이 고정 문구만 남기고 502 를 준다
+    return shelters(url.searchParams, env).catch(() => {
+      throw new Error(SHELTERS_FAILED);
+    });
   }
   const found = route(url.pathname);
   if (!found) return error(404, NOT_FOUND);
