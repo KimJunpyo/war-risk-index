@@ -9,6 +9,7 @@ R2 키
   받은 파일의 mtime 을 되돌리는 까닭: 여행경보·대피소·하루 재계산의 "하루 1회" 판단이 파일 mtime 에 기댄다.
 - manifest 가 없으면(첫 업로드 전) 받기 실패로 끝난다. 첫 업로드는 #55.
 - 배치는 state/ 를 지우지 않는다. 지우는 것은 publish 가 성공했을 때 사라진 api/ 키뿐이다.
+- backup/<KST 날짜>/state/…·backup/<날짜>/manifest.json: 하루 1회 R2 안에서 복사한 백업(#55). BACKUP_KEEP 개만 남긴다.
 
 환경변수: R2_ENDPOINT_URL, R2_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY(루트 .env 도 읽는다).
 aws CLI 가 PATH 에 있어야 한다(Actions 러너에는 기본으로 깔려 있다). Python 의존성은 늘지 않는다.
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,9 @@ STATE_DIRS = {"data": ("gdelt_tmp/*", "npm_cache/*", *TEMP_FILES), "out": TEMP_F
 API_DIR = publish.OUT_DIR.relative_to(ROOT).as_posix()  # out/api: 응답 JSON. R2 에서는 api/ 아래
 STATE_PREFIX, API_PREFIX = "state/", "api/"
 MANIFEST_KEY = "manifest.json"
+BACKUP_PREFIX = "backup/"  # backup/<KST 날짜>/state/…·backup/<날짜>/manifest.json(#55)
+BACKUP_KEEP = 7  # 날짜 백업을 이만큼 남긴다
+KST = timezone(timedelta(hours=9))  # 백업 날짜의 시간대(워크플로 TZ 와 같음)
 # 받기 때 out/api 로 미리 받는 지난 응답. 공공데이터 응답(available 값이 있는 것)은 빈 러너에서도 publish 의 공공데이터 유실
 # 가드가 작동하게, 뉴스(news/*)는 뉴스 단계가 그 mtime 으로 다시 받을 때를 정하고 실패한 대상의 지난 값을 그대로 두게(#54)
 GUARDED_API = ("shelters/meta.json", "shelters/regions.json", "countries/*/embassies.json", f"{publish.NEWS_DIR}/*")
@@ -203,6 +208,35 @@ def upload(root: Path, remote: Manifest, include_api: bool) -> None:
     print(f"R2 올리기: 올린 키 {len(changed)}개, 지운 키 {len(gone)}개, manifest {'올림' if local != remote else '그대로'}")
 
 
+def _today() -> str:
+    """오늘 날짜(KST). 백업 접두사에 쓴다."""
+    return datetime.now(KST).strftime("%Y-%m-%d")
+
+
+def backup() -> None:
+    """R2 state/ 와 manifest 를 backup/<오늘>/ 로 하루 1회 R2 안에서 복사하고, 날짜 백업은 BACKUP_KEEP 개만 남긴다(#55).
+
+    올리기가 끝난 뒤 부른다. manifest 를 맨 나중에 복사하므로 manifest 가 있는 날짜만 다 된 백업으로 본다.
+    오늘 것이 덜 됐으면(복사 도중 실패) sync --delete 로 다시 맞춘다. 다 됐으면 나열(Class A) 한 번으로 끝난다.
+    복원은 런북(deploy/RUNBOOK.md)에 있다.
+    """
+    bucket = os.environ[BUCKET_ENV]
+    out = _aws("s3api", "list-objects-v2", "--bucket", bucket, "--prefix", BACKUP_PREFIX, "--output", "json")
+    keys = [obj["Key"] for obj in json.loads(out or "{}").get("Contents") or []]
+    days = {k.removeprefix(BACKUP_PREFIX).split("/")[0] for k in keys}
+    today = _today()
+    if f"{BACKUP_PREFIX}{today}/{MANIFEST_KEY}" not in keys:
+        dest = f"s3://{bucket}/{BACKUP_PREFIX}{today}/"
+        # --copy-props none: aws 기본값은 큰 파일(멀티파트 복사)에서 객체 태그를 복사하려고 GetObjectTagging 을 부르는데,
+        # R2 는 NotImplemented 로 실패한다(2026-11-16 실측: 8MB 넘는 5개가 복사되지 않음)
+        _aws("s3", "sync", f"s3://{bucket}/{STATE_PREFIX}", dest + STATE_PREFIX, "--delete", "--copy-props", "none")
+        _aws("s3", "cp", f"s3://{bucket}/{MANIFEST_KEY}", dest + MANIFEST_KEY, "--copy-props", "none")
+        days.add(today)
+        print(f"R2 백업: {BACKUP_PREFIX}{today}/")
+    for day in sorted(days)[:-BACKUP_KEEP]:  # 날짜 이름(YYYY-MM-DD)이 오래된 순으로 정렬된다
+        _aws("s3", "rm", f"s3://{bucket}/{BACKUP_PREFIX}{day}/", "--recursive")
+
+
 def run(sync: bool = True) -> int:
     """배치 한 번. 종료 코드를 돌려준다: 0 성공, 1 실패.
 
@@ -243,6 +277,12 @@ def run(sync: bool = True) -> int:
         except Exception:
             log.exception("R2 올리기 실패")
             failed.append("R2 올리기")
+        else:  # 올리기가 실패하면 state/ 와 manifest 가 어긋났을 수 있어 백업하지 않는다
+            try:
+                backup()
+            except Exception:
+                log.exception("R2 백업 실패")
+                failed.append("R2 백업")
     print(f"배치 끝: {time.perf_counter() - started:.1f}초, aws 호출 {_aws_calls}번"
           + (f", 실패: {', '.join(failed)}" if failed else ""))
     return 1 if failed else 0

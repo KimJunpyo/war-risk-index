@@ -20,6 +20,10 @@ test_m12_news.py), 배치와 이어지는 부분(순서·news/* 받기·올리�
   로컬에 없는 state/ 키는 R2 객체와 manifest 항목을 그대로 두고 경고만 남긴다(다음 받기 때 다시 내려온다).
   publish 가 실패하면 api/ 는 올리지도 지우지도 않고 manifest 의 api/ 항목도 그대로 둔다(state/ 는 올린다).
 - 단계 순서: live.update → _daily_refresh → publish → 뉴스(news_publish.run).
+- 백업(#55): 올리기가 성공한 뒤 backup() 을 부른다. s3api list-objects-v2 --prefix backup/ 로 날짜를 보고,
+  그날(batch._today(), KST) backup/<날짜>/manifest.json 이 없으면 state/ → backup/<날짜>/state/ 를 R2 안에서 sync --delete 하고
+  manifest.json 을 맨 나중에 cp 한다. 날짜 백업(접두사)은 BACKUP_KEEP 개만 남기고 오래된 것부터 s3 rm --recursive 한다.
+  올리기가 실패하면 백업하지 않는다. 백업이 실패하면 기록하고 종료 코드 1.
 - 단계 실패는 main._updater 처럼 기록하고 다음 단계·올리기로 간다. 실패가 있으면 종료 코드 1.
 - 모든 aws 호출: --endpoint-url $R2_ENDPOINT_URL --region auto, 환경에 체크섬 변수 2개(when_required),
   subprocess.run 의 timeout=batch.AWS_TIMEOUT_SECONDS. 넘기면 실패로 친다.
@@ -30,6 +34,9 @@ test_m12_news.py), 배치와 이어지는 부분(순서·news/* 받기·올리�
 - s3 cp/sync 받기: 버킷 → 로컬. 받은 파일 mtime 은 지금(실제 aws 는 LastModified). 없는 단일 키는 종료 코드 1.
   --exclude·--include 는 원본 기준 상대 경로에 fnmatch 로 맞추고 뒤에 온 것이 이긴다(aws 와 같음, * 는 / 도 넘는다).
 - s3 cp 올리기: 로컬 → 버킷. s3api delete-objects: --delete file://<JSON> 의 키를 지우고, delete_errors 의 키는 Errors 로 돌려준다.
+- 버킷 → 버킷: s3 cp(키 하나), s3 sync(접두사 아래 전부, --delete 면 대상에만 있는 키를 지움). s3 rm --recursive: 접두사 아래 지움.
+  버킷 → 버킷 복사에 --copy-props none 이 없으면 종료 코드 1(R2 는 GetObjectTagging 을 지원하지 않는다, 2026-11-16 실측).
+  s3api list-objects-v2 --prefix: {"Contents": [{"Key": …}]}(없으면 {}).
 - 실패(fail)의 stderr 에는 엔드포인트·호스트·키 ID·비밀 키를 넣고, 시간 초과(timeout)는 명령줄을 담은 TimeoutExpired 를 낸다.
 - 계약 위반 호출(엔드포인트·region·체크섬 변수·제한 시간 없음)은 pytest.fail
   (BaseException 이라 배치의 except Exception 에 묻히지 않음).
@@ -98,7 +105,7 @@ def _parse(tokens: list[str]) -> tuple[list[str], dict[str, str], list[tuple[str
     filters: list[tuple[str, str]] = []
     it = iter(tokens)
     for tok in it:
-        if tok == "--recursive":
+        if tok == "--recursive" or (tok == "--delete" and args[:2] == ["s3", "sync"]):  # 값 없는 옵션
             opts[tok] = ""
         elif tok in ("--exclude", "--include"):
             filters.append((tok, next(it)))
@@ -151,9 +158,25 @@ class FakeAws:
             return subprocess.CompletedProcess(cmd, 1, "", f"가짜 실패: {ENDPOINT} 연결 안 됨(호스트 {HOST}, "
                                                            f"키 {KEY_ID}, 서명 {SECRET})")
         if args[0] == "s3api":
-            return self._delete(cmd, opts)
+            return self._list(cmd, opts) if args[1] == "list-objects-v2" else self._delete(cmd, opts)
+        if args[1] == "rm":  # 접두사 아래 전부 지우기(--recursive)
+            for key in [k for k in self.bucket if k.startswith(args[2].removeprefix(S3))]:
+                del self.bucket[key]
+            return subprocess.CompletedProcess(cmd, 0, "", "")
         src, dst = args[2], args[3]
-        if src.startswith(S3) and args[1] == "cp" and "--recursive" not in opts:  # 키 하나 받기
+        if src.startswith(S3) and dst.startswith(S3):  # R2 안에서 복사: 키 하나(cp) 또는 접두사 아래 전부(sync)
+            if opts.get("--copy-props") != "none":  # R2 는 태그 복사(GetObjectTagging)를 지원하지 않는다
+                return subprocess.CompletedProcess(cmd, 1, "", "(NotImplemented) GetObjectTagging not implemented")
+            src_key, dst_key = src.removeprefix(S3), dst.removeprefix(S3)
+            if args[1] == "cp" and "--recursive" not in opts:
+                self.bucket[dst_key] = self.bucket[src_key]
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            copies = {dst_key + k.removeprefix(src_key): v for k, v in self.bucket.items() if k.startswith(src_key)}
+            if "--delete" in opts:
+                for key in [k for k in self.bucket if k.startswith(dst_key) and k not in copies]:
+                    del self.bucket[key]
+            self.bucket |= copies
+        elif src.startswith(S3) and args[1] == "cp" and "--recursive" not in opts:  # 키 하나 받기
             key = src.removeprefix(S3)
             if key not in self.bucket:
                 return subprocess.CompletedProcess(cmd, 1, "", f"(404) {key} 없음")
@@ -171,6 +194,14 @@ class FakeAws:
                 self.bucket[key] = path.read_bytes()
                 self.uploaded.append(key)
         return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    def _list(self, cmd: list[str], opts: dict[str, str]) -> subprocess.CompletedProcess:
+        """s3api list-objects-v2 --prefix: 키 목록(aws 는 쪽을 모두 넘겨 Contents 하나로 낸다. 없으면 Contents 가 없다)."""
+        if opts.get("--bucket") != BUCKET:
+            pytest.fail(f"다른 버킷 나열: {opts.get('--bucket')}")
+        keys = sorted(k for k in self.bucket if k.startswith(opts.get("--prefix", "")))
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"Contents": [{"Key": k} for k in keys]} if keys else {}),
+                                           "")
 
     def _delete(self, cmd: list[str], opts: dict[str, str]) -> subprocess.CompletedProcess:
         if opts.get("--bucket") != BUCKET:
@@ -208,6 +239,15 @@ def runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def no_news(monkeypatch: pytest.MonkeyPatch) -> None:
     """뉴스 단계는 Google 에 접속하므로 아무것도 하지 않게 바꾼다. 필요한 테스트는 다시 바꿔 끼운다."""
     monkeypatch.setattr(news_publish, "run", lambda out_dir: None)
+
+
+REAL_BACKUP = batch.backup  # 백업 테스트(with_backup)가 다시 끼운다
+
+
+@pytest.fixture(autouse=True)
+def no_backup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R2 백업(#55)은 aws 호출 순서·횟수를 보는 다른 테스트와 섞이지 않게 끈다. 백업 테스트는 with_backup 으로 켠다."""
+    monkeypatch.setattr(batch, "backup", lambda: None)
 
 
 def _write(root: Path, rel: str, text: str, mtime_ns: int | None = None) -> Path:
@@ -493,3 +533,93 @@ def test_publish_failure_skips_news(aws: FakeAws, runner: Path, tmp_path: Path,
     monkeypatch.setattr(news_publish, "run", lambda out_dir: steps.append("news"))
     assert batch.run() != 0
     assert steps == STEPS
+
+
+# ---------- R2 백업(#55) ----------
+
+TODAY = "2026-11-16"
+
+
+@pytest.fixture
+def with_backup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batch, "backup", REAL_BACKUP)
+    monkeypatch.setattr(batch, "_today", lambda: TODAY)
+
+
+def _backup_days(aws: FakeAws) -> list[str]:
+    return sorted({k.split("/")[1] for k in aws.bucket if k.startswith("backup/")})
+
+
+def _backup_calls(aws: FakeAws) -> list[list[str]]:
+    """백업이 부르는 aws: 나열, 버킷 안 복사(원본·대상이 모두 버킷), 지우기."""
+    return [c[:2] for c in aws.calls if c[:2] == ["s3api", "list-objects-v2"] or c[1] == "rm"
+            or (len(c) > 3 and c[2].startswith(S3) and c[3].startswith(S3))]
+
+
+def test_backup_once_a_day_after_upload(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                        with_backup: None) -> None:
+    """올리기가 끝난 뒤 그날(KST) 백업이 없으면 state/ 와 manifest 를 backup/<날짜>/ 로 R2 안에서 복사한다.
+    같은 날 다음 실행은 나열 한 번만 한다."""
+    _seed(aws, tmp_path)
+    _fake_steps(monkeypatch)
+    assert batch.run() == 0
+    prefix = f"backup/{TODAY}/"
+    state = {k: v for k, v in aws.bucket.items() if k.startswith("state/")}
+    assert {k.removeprefix(prefix): v for k, v in aws.bucket.items() if k.startswith(prefix + "state/")} == state
+    assert aws.bucket[prefix + "manifest.json"] == aws.bucket["manifest.json"]
+    manifest_upload = max(i for i, c in enumerate(aws.calls) if c[:2] == ["s3", "cp"] and c[3] == S3 + "manifest.json")
+    assert aws.calls.index(["s3api", "list-objects-v2"]) > manifest_upload  # 올리기가 끝난 뒤
+    aws.calls.clear()
+    assert batch.run() == 0
+    assert _backup_calls(aws) == [["s3api", "list-objects-v2"]]
+
+
+def test_backup_keeps_latest_days(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                  with_backup: None) -> None:
+    """날짜 백업은 BACKUP_KEEP 개만 남기고 오래된 날짜부터 지운다(R2 지우기는 요금이 없다)."""
+    _seed(aws, tmp_path)
+    _fake_steps(monkeypatch)
+    old = [f"2026-11-{d:02d}" for d in range(1, batch.BACKUP_KEEP + 2)]  # 8일치
+    for day in old:
+        aws.bucket[f"backup/{day}/manifest.json"] = b"{}"
+        aws.bucket[f"backup/{day}/state/data/x.csv"] = b"x"
+    assert batch.run() == 0
+    assert _backup_days(aws) == [*old, TODAY][-batch.BACKUP_KEEP:]
+
+
+def test_backup_redoes_incomplete_day(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                      with_backup: None) -> None:
+    """manifest 가 없는 날짜는 복사 도중 끊긴 백업이다. 다음 실행이 다시 맞추고 state/ 에 없는 찌꺼기도 지운다."""
+    _seed(aws, tmp_path)
+    _fake_steps(monkeypatch)
+    aws.bucket[f"backup/{TODAY}/state/data/stale.csv"] = b"half"
+    assert batch.run() == 0
+    assert f"backup/{TODAY}/manifest.json" in aws.bucket
+    assert f"backup/{TODAY}/state/data/stale.csv" not in aws.bucket
+
+
+def test_backup_skipped_when_upload_fails(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                          with_backup: None) -> None:
+    """올리기가 실패하면 R2 의 state/ 와 manifest 가 어긋났을 수 있어 백업하지 않는다."""
+    _seed(aws, tmp_path)
+    _fake_steps(monkeypatch)
+
+    def broken_upload(root: Path, remote: dict, include_api: bool) -> None:
+        raise RuntimeError("가짜 올리기 실패")
+
+    monkeypatch.setattr(batch, "upload", broken_upload)
+    assert batch.run() == 1
+    assert _backup_calls(aws) == []
+
+
+def test_backup_failure_fails_run(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                  with_backup: None, capsys: pytest.CaptureFixture[str],
+                                  caplog: pytest.LogCaptureFixture) -> None:
+    """백업이 실패하면 기록하고 종료 코드 1(Actions 에서 보이게). 올린 상태는 그대로이고 비밀값은 가린다."""
+    _seed(aws, tmp_path)
+    _fake_steps(monkeypatch)
+    aws.fail = "list-objects-v2"
+    assert batch.run() == 1
+    assert aws.bucket["state/data/live/country_15min.csv"] == NEW_LIVE.encode()
+    text = capsys.readouterr().out + caplog.text
+    assert "R2 백업" in text and not any(secret in text for secret in HIDDEN)
