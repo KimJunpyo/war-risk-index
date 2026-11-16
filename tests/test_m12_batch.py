@@ -2,13 +2,16 @@
 
 네트워크와 실제 aws CLI 는 쓰지 않는다. subprocess.run 을 메모리 버킷({키: 바이트})을 쓰는 가짜 aws(FakeAws)로 바꾸고,
 batch.ROOT 는 tmp 폴더로 옮긴다. 갱신 단계(live.update, main._daily_refresh, publish.run)도 가짜다.
+뉴스 단계(news_publish.run, #54)는 Google 에 접속하므로 이 파일에서는 아무것도 하지 않게 바꿔 두고(그 단계 자체는
+test_m12_news.py), 배치와 이어지는 부분(순서·news/* 받기·올리기)만 test_news_files_round_trip 에서 따로 바꿔 끼워 본다.
 
 계약 (구현은 이 계약을 따른다)
 - 키: data/… → state/data/…, out/…(out/api 제외) → state/out/…, out/api/… → api/…, 버킷 루트 manifest.json.
   manifest = {키: {"sha256": 16진수, "mtime": st_mtime_ns}}.
 - 제외: data/gdelt_tmp/, data/npm_cache/, *.part, *.tmp. data/·out/ 밖(루트 .env·.git·.venv 등)은 보지도 받지도 않는다.
 - 받기: manifest → state/data/ → data/, state/out/ → out/ (sync 두 번, 제외 패턴은 원본 접두사 기준)
-  → out/api 로 공공데이터 응답(shelters/meta·regions, countries/*/embassies)만. 받은 파일 mtime 은 manifest 값으로 되돌린다.
+  → out/api 로 공공데이터 응답(shelters/meta·regions, countries/*/embassies)과 뉴스(news/*)만. 받은 파일 mtime 은 manifest 값으로
+  되돌린다(뉴스 단계는 그 mtime 으로 다시 받을 때를 정한다).
   sync 가 0 으로 끝나도 manifest 의 state/ 키가 하나라도 로컬에 없으면 받기 실패다.
   받기가 실패하면(시간 초과 포함) 아무것도 돌리지 않고, 아무것도 올리지 않고, 0 이 아닌 종료 코드.
 - 올리기: sha256 이 manifest 와 다른 파일(새 파일 포함)만 aws s3 cp --recursive 한 번으로 올리고, manifest 는 바뀌었을 때만
@@ -16,6 +19,7 @@ batch.ROOT 는 tmp 폴더로 옮긴다. 갱신 단계(live.update, main._daily_r
   지우기는 로컬에 없는 api/ 키에만, publish 가 성공했을 때만 한다(s3api delete-objects, 1000개씩).
   로컬에 없는 state/ 키는 R2 객체와 manifest 항목을 그대로 두고 경고만 남긴다(다음 받기 때 다시 내려온다).
   publish 가 실패하면 api/ 는 올리지도 지우지도 않고 manifest 의 api/ 항목도 그대로 둔다(state/ 는 올린다).
+- 단계 순서: live.update → _daily_refresh → publish → 뉴스(news_publish.run).
 - 단계 실패는 main._updater 처럼 기록하고 다음 단계·올리기로 간다. 실패가 있으면 종료 코드 1.
 - 모든 aws 호출: --endpoint-url $R2_ENDPOINT_URL --region auto, 환경에 체크섬 변수 2개(when_required),
   subprocess.run 의 timeout=batch.AWS_TIMEOUT_SECONDS. 넘기면 실패로 친다.
@@ -40,6 +44,7 @@ batch.ROOT 는 tmp 폴더로 옮긴다. 갱신 단계(live.update, main._daily_r
 - publish 실패면 api/ 를 올리지도 지우지도 않음: test_publish_failure_keeps_api
 - 두 번째 실행은 바뀐 파일만 올림(명령 인수 조건의 가짜 버킷 판): test_run_uploads_only_changes
 - 단계 실패에도 계속: test_step_failure_continues / 환경변수 없음: test_missing_env_needs_no_sync
+- 지난 뉴스 파일을 mtime 그대로 받고, 뉴스 단계는 publish 다음, 바뀐 뉴스만 올리고 지우지 않음: test_news_files_round_trip
 """
 
 import hashlib
@@ -53,6 +58,7 @@ import pytest
 
 import batch
 import live
+import news_publish
 import publish
 from backend.app import main
 
@@ -198,6 +204,12 @@ def runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
+@pytest.fixture(autouse=True)
+def no_news(monkeypatch: pytest.MonkeyPatch) -> None:
+    """뉴스 단계는 Google 에 접속하므로 아무것도 하지 않게 바꾼다. 필요한 테스트는 다시 바꿔 끼운다."""
+    monkeypatch.setattr(news_publish, "run", lambda out_dir: None)
+
+
 def _write(root: Path, rel: str, text: str, mtime_ns: int | None = None) -> Path:
     """줄바꿈을 바꾸지 않도록 바이트로 쓴다."""
     path = root / rel
@@ -215,10 +227,11 @@ def _api(entries: dict) -> dict:
     return {k: v for k, v in entries.items() if k.startswith("api/")}
 
 
-def _seed(aws: FakeAws, tmp_path: Path) -> dict:
-    """지난 실행(VM)의 상태와 응답을 버킷에 올려 두고 그 manifest 를 돌려준다. 가짜 aws 기록은 비운다."""
+def _seed(aws: FakeAws, tmp_path: Path, extra: dict[str, str] | None = None) -> dict:
+    """지난 실행(VM)의 상태와 응답(+ extra: {저장소 기준 경로: 내용})을 버킷에 올려 두고 그 manifest 를 돌려준다.
+    가짜 aws 기록은 비운다."""
     vm = tmp_path / "vm"
-    for rel, text in VM_FILES.items():
+    for rel, text in {**VM_FILES, **(extra or {})}.items():
         _write(vm, rel, text, OLD_NS)
     batch.upload(vm, {}, include_api=True)
     aws.calls.clear()
@@ -441,3 +454,42 @@ def test_missing_env_needs_no_sync(aws: FakeAws, runner: Path, monkeypatch: pyte
     assert steps == [] and aws.calls == []
     assert batch.run(sync=False) == 0
     assert steps == STEPS and aws.calls == []
+
+
+# ---------- 뉴스(#54) ----------
+
+# 지난 실행이 남긴 뉴스(out/api 기준)
+NEWS = {"news/pairs/KOR-PRK/24h.json": '[{"title":"지난 기사"}]', "news/countries/KOR/7d.json": "[]"}
+
+
+def test_news_files_round_trip(aws: FakeAws, runner: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """빈 러너도 지난 뉴스 파일(news/*)을 manifest 의 mtime 그대로 받아 publish 다음의 뉴스 단계에 넘긴다.
+    뉴스 단계가 다시 쓴 파일만 올리고, 건드리지 않은 파일(실패한 대상·아직 때가 안 된 범위)은 R2 에서 지우지 않는다."""
+    _seed(aws, tmp_path, {f"out/api/{rel}": text for rel, text in NEWS.items()})
+    steps = _fake_steps(monkeypatch)
+    seen: dict[str, int] = {}
+
+    def news(out_dir: Path) -> None:
+        steps.append("news")
+        seen.update({rel: (out_dir / rel).stat().st_mtime_ns for rel in NEWS})
+        _write(out_dir, "news/pairs/KOR-PRK/24h.json", '[{"title":"새 기사"}]')
+
+    monkeypatch.setattr(news_publish, "run", news)
+    assert batch.run() == 0
+    assert steps == [*STEPS, "news"]
+    assert seen == dict.fromkeys(NEWS, OLD_NS)
+    assert sorted(aws.uploaded[:-1]) == ["api/news/pairs/KOR-PRK/24h.json", "api/pairs.json",
+                                         "state/data/live/country_15min.csv"]
+    assert aws.bucket["api/news/pairs/KOR-PRK/24h.json"] == '[{"title":"새 기사"}]'.encode()
+    assert aws.bucket["api/news/countries/KOR/7d.json"] == b"[]"
+    assert aws.deleted == [[f"api/{STALE_TILE}"]]
+
+
+def test_publish_failure_skips_news(aws: FakeAws, runner: Path, tmp_path: Path,
+                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    """publish 가 실패하면 api/ 를 올리지 않으므로 뉴스 단계는 건너뛴다(받아도 버려져 Google 요청만 낭비된다)."""
+    _seed(aws, tmp_path)
+    steps = _fake_steps(monkeypatch, publish_error=RuntimeError("공공데이터가 빠져 지난 응답을 지우게 됨"))
+    monkeypatch.setattr(news_publish, "run", lambda out_dir: steps.append("news"))
+    assert batch.run() != 0
+    assert steps == STEPS

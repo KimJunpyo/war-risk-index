@@ -92,7 +92,6 @@ describe("라우팅", () => {
     "/api/pairs/",
     "/api/pairs/KOR-PRK",
     "/api/pairs/KOR-PRK/embassies",
-    "/api/pairs/KOR-PRK/news", // #54
     "/api/countries/KOR/index/extra",
   ])("알 수 없는 경로는 FastAPI 처럼 Not Found: %s", async (path) => {
     const res = await request(path);

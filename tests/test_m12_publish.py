@@ -187,6 +187,16 @@ def test_write_removes_stale_files(tmp_path: Path) -> None:
     assert _load(tmp_path, "live.json") == {"as_of": None, "slots": 0}
 
 
+def test_write_keeps_news(tmp_path: Path) -> None:
+    """news/ 는 뉴스 단계(news_publish.py, #54)가 관리한다. 이번에 만들지 않았어도 지우지 않는다(실패한 대상의 지난 값 유지).
+    news/ 폴더 밖의 옛 파일은 이름이 news 로 시작해도 지운다."""
+    for rel in ("news/pairs/KOR-PRK/24h.json", "news/countries/KOR/7d.json", "news.json", "shelters/tiles/1_2.json"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("[]", encoding="utf-8")
+    publish.write({"live.json": {"as_of": None, "slots": 0}}, tmp_path)
+    assert _files(tmp_path) == ["live.json", "news/countries/KOR/7d.json", "news/pairs/KOR-PRK/24h.json"]
+
+
 def test_tile_key_floor() -> None:
     assert publish.tile_key(37.5, 127.0) == "750_2540"
     assert publish.tile_key(37.49, 126.99) == "749_2539"

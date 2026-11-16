@@ -1,6 +1,7 @@
 """지금 API(backend/app/main.py)의 고정 엔드포인트 응답을 out/api/ 아래 JSON 파일로 미리 만든다(#50).
 
-Cloudflare Worker 는 이 파일을 내주기만 한다. news 는 동적이라 만들지 않는다(#54).
+Cloudflare Worker 는 이 파일을 내주기만 한다. news 는 여기서 만들지 않는다. news/ 아래는 배치 뉴스 단계(news_publish.py)가
+관리하므로 write 의 옛 파일 정리도 지우지 않는다(#54).
 계산은 main.py 의 엔드포인트 함수를 그대로 부르고, "응답 행 만들기(build) → JSON 쓰기(write)" 두 단계로 나눈다.
 나중에 같은 행을 D1 에 넣을 때는 build() 결과만 쓰면 된다.
 
@@ -25,6 +26,7 @@ from backend.app import main
 from backend.app.pairs import PAIRS
 
 OUT_DIR = main.ROOT / "out" / "api"
+NEWS_DIR = "news"  # out/api 기준 뉴스 폴더. news_publish 가 관리한다(실패한 대상은 지난 파일을 그대로 둔다)
 CATALYST_DAYS = 90  # 프론트가 쓰는 기간(CatalystPanel.tsx). 이 기간 파일 하나만 만든다
 # 0.05° 격자: 키 = floor(좌표 × 20). 0.1° 격자에서는 Worker 좌표 검색 CPU 가 중앙값 7ms·최대 11ms(무료 한도 10ms)라
 # 한 번에 읽는 시설 수를 줄였다(#54)
@@ -98,7 +100,7 @@ def _lost_public_data(payloads: dict[str, Any], out_dir: Path) -> list[str]:
 
 
 def write(payloads: dict[str, Any], out_dir: Path = OUT_DIR) -> None:
-    """응답 객체를 JSON 파일로 원자적으로 쓰고, 이번에 만들지 않은 옛 파일(사라진 타일·지역 등)은 지운다.
+    """응답 객체를 JSON 파일로 원자적으로 쓰고, 이번에 만들지 않은 옛 파일(사라진 타일·지역 등. NEWS_DIR 아래는 빼고)은 지운다.
 
     공공데이터가 빠진 응답으로 지난 응답을 덮게 되면 아무것도 쓰지 않고 멈춘다(조용히 지우지 않고 배치를 실패시킴).
     """
@@ -112,7 +114,7 @@ def write(payloads: dict[str, Any], out_dir: Path = OUT_DIR) -> None:
         atomic_write.write_text(path, json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
     keep = {(out_dir / rel).resolve() for rel in payloads}
     for path in out_dir.rglob("*.json"):
-        if path.resolve() not in keep:
+        if path.resolve() not in keep and path.relative_to(out_dir).parts[0] != NEWS_DIR:
             path.unlink()
 
 
