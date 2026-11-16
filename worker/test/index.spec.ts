@@ -266,3 +266,36 @@ describe("CORS", () => {
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe(ORIGIN);
   });
 });
+
+describe("Cron Trigger: 갱신 워크플로 수동 실행(#52)", () => {
+  const DISPATCH_URL = "https://api.github.com/repos/KimJunpyo/war-risk-index/actions/workflows/refresh.yml/dispatches";
+  const controller = { scheduledTime: 0, cron: "7,22,37,52 * * * *", noRetry() {} } as ScheduledController;
+  const withToken = { ...env, GITHUB_DISPATCH_TOKEN: "test-token" } as Env;
+
+  it("토큰으로 refresh.yml 을 main 에서 workflow_dispatch 한다", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    await worker.scheduled(controller, withToken);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe(DISPATCH_URL);
+    expect(init?.method).toBe("POST");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer test-token");
+    expect(headers.get("Accept")).toBe("application/vnd.github+json");
+    expect(headers.get("User-Agent")).toBeTruthy(); // GitHub API 는 User-Agent 가 없으면 거부한다
+    expect(JSON.parse(String(init?.body))).toEqual({ ref: "main" });
+  });
+
+  it("토큰이 없으면 부르지 않고 실패로 끝낸다", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await expect(worker.scheduled(controller, env as Env)).rejects.toThrow("GITHUB_DISPATCH_TOKEN");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("204 가 아니면 상태 코드를 담아 실패로 끝내고, 토큰은 메시지에 없다", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"message":"Bad credentials"}', { status: 401 }));
+    const err = await worker.scheduled(controller, withToken).then(() => null, (e: unknown) => String(e));
+    expect(err).toContain("401");
+    expect(err).not.toContain("test-token");
+  });
+});
