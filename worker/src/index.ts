@@ -2,11 +2,13 @@
  * 전쟁 가능성 지수 API Worker(#53). publish.py(#50)가 만들고 batch.py(#51)가 R2 api/ 에 올린 응답 JSON 을
  * 파싱하지 않고 그대로 흘려보낸다(무료 플랜 요청당 CPU 10ms). 경로·오류 문구·health 규칙은 backend/app/main.py 와 같다.
  * news·대피소 위치·지역 검색(/api/shelters?…)은 #54 에서 만든다.
+ * Cron Trigger(scheduled)는 15분마다 갱신 워크플로(refresh.yml)를 수동 실행으로 부른다(#52).
  */
 
 export interface Env {
   BUCKET: R2Bucket;
   CORS_ORIGINS?: string; // 쉼표로 구분한 허용 출처(main.CORS_ORIGINS 와 같은 뜻). 없거나 비면 어떤 출처도 허용하지 않는다
+  GITHUB_DISPATCH_TOKEN?: string; // wrangler secret: 이 저장소만, Actions 읽기·쓰기 권한의 GitHub 미세 권한 토큰
 }
 
 type Status = { live_as_of: string | null; index_date: string | null }; // publish.build() 의 status.json
@@ -26,6 +28,12 @@ const STATUS_KEY = "api/status.json";
 const NOT_FOUND = "Not Found"; // FastAPI 의 알 수 없는 경로 문구
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const UPSTREAM_FAILED = "응답 조회 실패"; // R2 오류 등 예외일 때의 502 문구
+// GitHub 예약(schedule) 실행은 3일 동안 15분 슬롯의 4%만 돌아서(#52), Cron Trigger 가 같은 워크플로를 수동 실행한다
+const DISPATCH_URL = "https://api.github.com/repos/KimJunpyo/war-risk-index/actions/workflows/refresh.yml/dispatches";
+const DISPATCH_REF = "main";
+const GITHUB_API_VERSION = "2022-11-28";
+const USER_AGENT = "war-risk-api-cron"; // GitHub API 는 User-Agent 가 없는 요청을 거부한다
+const ERROR_BODY_CHARS = 200; // 실패 로그에 남길 GitHub 응답 본문 길이
 
 // 경로 파라미터가 없는 응답 → max-age. R2 키는 모든 경로에서 /api/x → api/x.json 이다
 const FIXED_ROUTES = new Map([
@@ -123,7 +131,30 @@ async function handle(request: Request, env: Env): Promise<Response> {
   return object ? json(object.body, 200, `public, max-age=${found.maxAge}`) : error(404, found.detail);
 }
 
+/** 갱신 워크플로를 main 에서 수동 실행한다. 토큰이 없거나 204 가 아니면 throw 해 Cron 이벤트에 실패로 남긴다. */
+async function dispatchRefresh(env: Env): Promise<void> {
+  if (!env.GITHUB_DISPATCH_TOKEN) throw new Error("GITHUB_DISPATCH_TOKEN 없음: 갱신 워크플로를 부르지 않음");
+  const response = await fetch(DISPATCH_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      "User-Agent": USER_AGENT,
+    },
+    body: JSON.stringify({ ref: DISPATCH_REF }),
+  });
+  if (response.status !== 204) {
+    const detail = (await response.text()).slice(0, ERROR_BODY_CHARS);
+    throw new Error(`갱신 워크플로 호출 실패: ${response.status} ${detail}`);
+  }
+}
+
 export default {
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await dispatchRefresh(env);
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const response = await handle(request, env).catch((e: unknown) => {
       // 그대로 두면 Cloudflare 오류 페이지(HTML, CORS 없음)가 나가 프론트가 오류를 읽지 못한다
