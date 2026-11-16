@@ -23,7 +23,8 @@ from gpr_backtest import SCORE_AT_Z0, SCORE_PER_Z
 from index_v1 import DAILY_BASELINE_DAYS as BASELINE_DAYS
 from index_v1 import DAILY_MIN_DAYS
 
-V2_BASE = "http://data.gdeltproject.org/gdeltv2/"
+# http 주소는 https 로 301 리다이렉트된다. 한 번 덜 거치도록 https 로 바로 받는다
+V2_BASE = "https://data.gdeltproject.org/gdeltv2/"
 LAST_UPDATE_URL = V2_BASE + "lastupdate.txt"
 SLOT_MINUTES = 15
 LIVE_HOURS = 24
@@ -85,8 +86,11 @@ def update() -> int:
             try:
                 rows, dyad_rows, cat_rows = fut.result()
             except urllib.error.HTTPError as e:
-                if e.code == 404:
+                if e.code == 404:  # GDELT 가 건너뛴 슬롯: 이 프로세스에서는 다시 받지 않는다
                     _missing.add(key)
+                # 404 가 아닌 오류(403·429·503 등)도 남긴다. 예전에는 기록 없이 건너뛰어, 러너에서 슬롯이 계속 빠지는 동안
+                # 원인을 볼 수 없었다(#52, 2026-11-16 실시간이 06:30Z 에 멈춤)
+                print(f"[live 실패] {key}: HTTP {e.code}", flush=True)
                 continue
             except Exception as e:  # 일시 오류는 다음 주기에 다시 시도
                 print(f"[live 실패] {key}: {e}", flush=True)
