@@ -18,7 +18,9 @@
     totalCount 를 다 받을 때까지 pageNo 를 올린다. 국가 필터(cond[...]) 없이 전체를 받는다.
     (#52) 한 쪽이 일시 오류(OSError·JSON 아님·response 없음)면 그 쪽만 PAGE_TRIES 번까지 다시 부른다(RETRY_PAUSE_SECONDS 쉼).
     끝내 실패하면 RuntimeError(받은 건수를 메시지에, 원래 예외를 __cause__ 로). response 가 없으면 최상위 키 이름만 알린다.
-    budget_seconds(선택)를 넘기면 다음 요청 전에 RuntimeError. 시계는 data_go_kr.time.monotonic 이다.
+- (#52) fetch_pages(url, page_size, first_page=1, received=0, max_pages, budget_seconds=None, params=None): 한 쪽씩
+    (쪽 번호, items, totalCount)를 내는 제너레이터. fetch_all 은 이것을 끝까지 돈다. received = first_page 앞에서 받은 건수.
+    budget_seconds 를 넘기면 다음 요청 전에 예외 없이 멈춘다. 시계는 data_go_kr.time.monotonic 이다.
 - (#52) 실패 시각: mark_failed(data_file) 은 data_file 옆 .failed 파일에 지금(epoch 초)을 적고,
   failed_recently(data_file, seconds) 는 그 시각에서 seconds 가 안 지났으면 True(파일이 없거나 깨졌으면 False).
   배치는 실행마다 새 프로세스라 메모리 값이 사라지지만, data/ 아래 파일은 R2 state 로 다음 실행에 넘어간다.
@@ -35,7 +37,11 @@
     한 나라 여러 행은 기존 dedupe() 가 최고 단계 하나로 줄인다.
 - update(): 키 없음 → 외교부 행 0건(직전 값도 버림), data.go.kr 호출 없음. 외교부 호출 실패 → 직전 외교부 행 유지.
 - (#52) shelters·embassies update 는 실패하면 mark_failed(데이터 파일)을 부르고, force 가 아니면
-  failed_recently(데이터 파일, RETRY_SECONDS) 동안 부르지 않는다. 대피시설은 fetch_all 에 budget_seconds 를 넘긴다.
+  failed_recently(데이터 파일, RETRY_SECONDS) 동안 부르지 않는다.
+- (#52) 대피시설 이어 받기: update 는 한 번에 FETCH_BUDGET_SECONDS 까지만 받고(force 는 끝까지), 받은 원문 쪽을
+  SHELTER_FILE.with_suffix(PARTIAL_SUFFIX) 에 {started, total, next_page, items} 로 남긴 뒤 False. 다음 호출이 next_page 부터 잇는다.
+  다 받으면 그 파일을 {} 로 비우고 CSV 를 쓴다. 실패해도 받은 쪽은 남긴다.
+  totalCount 가 바뀌었거나 PARTIAL_MAX_SECONDS 보다 오래됐거나 깨진 이어 받기는 버리고 처음부터 받는다.
   어느 경우든 미·영은 정상 갱신.
 - GET /api/countries: 키 없으면 advisory 에서 kr_mofa 를 뺀다(CSV 에 남아 있어도). us_state·uk_fcdo 는 키 유무와 무관.
 
@@ -316,8 +322,8 @@ def test_fetch_all_gateway_error_code(portal, monkeypatch) -> None:
     assert "04 HTTP 에러" in str(info.value.__cause__)
 
 
-def test_fetch_all_stops_at_budget(portal, monkeypatch) -> None:
-    """budget_seconds 를 넘기면 다음 요청 전에 멈추고 받은 건수를 알린다(배치가 워크플로 제한 시간 안에 끝나게, #52)."""
+def test_fetch_pages_stops_at_budget(portal, monkeypatch) -> None:
+    """budget_seconds 를 넘기면 다음 요청 전에 예외 없이 멈춘다. 이미 낸 쪽은 그대로다(이어 받기, #52)."""
     import data_go_kr
 
     clock = FakeClock()
@@ -328,10 +334,20 @@ def test_fetch_all_stops_at_budget(portal, monkeypatch) -> None:
         return portal(url)
 
     monkeypatch.setattr(data_go_kr, "_get_json", slow)
-    with pytest.raises(RuntimeError, match=f"3/{len(_items('travel'))}건"):
-        data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 1, budget_seconds=25)
+    got = list(data_go_kr.fetch_pages("https://apis.data.go.kr" + TRAVEL_PATH, 1, budget_seconds=25))
+    total = len(_items("travel"))
+    assert [(page, len(items), t) for page, items, t in got] == [(1, 1, total), (2, 1, total), (3, 1, total)]
     assert _pages(portal.urls) == ["1", "2", "3"]  # 30초째(4쪽 앞)에 멈춤
     assert data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 1) == _items("travel")  # 상한이 없으면 끝까지
+
+
+def test_fetch_pages_from_middle(portal) -> None:
+    """first_page 부터 받고, 앞에서 받은 건수(received)에 더해 totalCount 에서 끝난다(이어 받기, #52)."""
+    import data_go_kr
+
+    got = list(data_go_kr.fetch_pages("https://apis.data.go.kr" + TRAVEL_PATH, 2, first_page=2, received=2))  # 5건 → 3쪽
+    assert [page for page, _, _ in got] == [2, 3]
+    assert [i for _, items, _ in got for i in items] == _items("travel")[2:]
 
 
 def test_failure_time_file(tmp_path, monkeypatch) -> None:
@@ -376,16 +392,18 @@ def test_update_skips_while_failed_recently(portal, monkeypatch, tmp_path, modul
     assert module.update(force=True) is True
 
 
-def test_failure_files_go_to_r2_state() -> None:
-    """.failed 파일은 배치가 R2 state 로 올리고 다음 실행에 받는 대상이다(제외 패턴에 걸리지 않음, #52)."""
+def test_state_files_go_to_r2() -> None:
+    """실패 시각(.failed)·대피시설 이어 받기 파일은 배치가 R2 state 로 올리고 다음 실행에 받는 대상이다
+    (제외 패턴에 걸리지 않음, #52)."""
     import fnmatch
 
     import batch
     import embassies
     import shelters
 
-    for data_file in (shelters.SHELTER_FILE, embassies.EMBASSY_FILE):
-        rel = data_file.with_suffix(".failed").relative_to("data").as_posix()
+    for path in (shelters.SHELTER_FILE.with_suffix(".failed"), embassies.EMBASSY_FILE.with_suffix(".failed"),
+                 shelters.SHELTER_FILE.with_suffix(shelters.PARTIAL_SUFFIX)):
+        rel = path.relative_to("data").as_posix()
         assert not any(fnmatch.fnmatch(rel, p) for p in batch.STATE_DIRS["data"]), rel
 
 
@@ -614,20 +632,123 @@ def test_update_failure_keeps_old_file(portal, shelter_data, monkeypatch) -> Non
     assert shelter_data.read_bytes() == before
 
 
-def test_update_has_time_budget(portal, shelter_file, monkeypatch) -> None:
-    """대피시설 전량(약 190쪽)은 시간 상한 안에서만 받는다(배치 10분 제한, #52)."""
+@pytest.fixture
+def slow_portal(portal, monkeypatch):
+    """요청 하나에 10초 걸리는 포털(data_go_kr 시계만 바꾼다). 대피시설 쪽당 3건(픽스처 10건 → 4쪽), 한 번에 25초(3쪽)."""
+    import data_go_kr
     import shelters
 
-    seen: dict = {}
-    real = shelters.data_go_kr.fetch_all
+    clock = FakeClock()
+    monkeypatch.setattr(data_go_kr, "time", clock)
 
-    def spy(*args, **kwargs):
-        seen.update(kwargs)
-        return real(*args, **kwargs)
+    def slow(url: str) -> dict:
+        clock.now += 10
+        return portal(url)
 
-    monkeypatch.setattr(shelters.data_go_kr, "fetch_all", spy)
+    monkeypatch.setattr(data_go_kr, "_get_json", slow)
+    monkeypatch.setattr(shelters, "PAGE_SIZE", 3)
+    monkeypatch.setattr(shelters, "FETCH_BUDGET_SECONDS", 25)
+    return portal
+
+
+def _partial(shelter_file: Path) -> dict:
+    import shelters
+
+    return json.loads(shelter_file.with_suffix(shelters.PARTIAL_SUFFIX).read_text(encoding="utf-8"))
+
+
+def test_update_resumes_across_calls(slow_portal, shelter_file) -> None:
+    """한 번에 FETCH_BUDGET_SECONDS 까지만 받고, 받은 원문 쪽은 이어 받기 파일에 남겨 다음 호출이 잇는다(#52).
+    러너에서는 쪽당 약 6초라 전량(189쪽)을 15분 배치 한 번에 못 받는다."""
+    import shelters
+
+    assert shelters.update() is False and not shelter_file.exists()
+    assert _pages(slow_portal.urls) == ["1", "2", "3"]
+    saved = _partial(shelter_file)
+    assert (saved["next_page"], saved["total"], len(saved["items"])) == (4, 10, 9)
+    slow_portal.urls.clear()
+    assert shelters.update() is True
+    assert _pages(slow_portal.urls) == ["4"]
+    assert len(pd.read_csv(shelter_file)) == 7  # test_update_paginates_and_filters 와 같은 결과
+    assert _partial(shelter_file) == {}  # 지우지 않고 비운다(지우면 배치가 R2 의 지난 내용을 다시 받음)
+
+
+def test_update_restarts_when_total_changes(slow_portal, shelter_file) -> None:
+    """이어 받는 사이 원천 건수(totalCount)가 바뀌면 지난 쪽을 버리고 처음부터 받는다(쪽 경계가 밀렸을 수 있음)."""
+    import shelters
+
+    assert shelters.update() is False  # 1~3쪽
+    slow_portal.routes[SHELTER_PATH] = _items("shelter") + _items("shelter")[:1]  # 11건
+    assert shelters.update() is False  # 4쪽에서 건수가 바뀐 것을 보고 버림
+    assert _partial(shelter_file) == {} and not shelter_file.exists()
+    slow_portal.urls.clear()
+    assert shelters.update() is False
+    assert _pages(slow_portal.urls)[0] == "1"
+
+
+def test_update_drops_stale_or_broken_partial(slow_portal, shelter_file) -> None:
+    """PARTIAL_MAX_SECONDS 보다 오래됐거나 깨진 이어 받기는 버리고 처음부터 받는다."""
+    import shelters
+
+    old = {"started": time.time() - shelters.PARTIAL_MAX_SECONDS - 1, "total": 10, "next_page": 4,
+           "items": _items("shelter")[:9]}
+    for content in (json.dumps(old), "깨진 값"):
+        shelter_file.with_suffix(shelters.PARTIAL_SUFFIX).write_text(content, encoding="utf-8")
+        slow_portal.urls.clear()
+        assert shelters.update() is False
+        assert _pages(slow_portal.urls) == ["1", "2", "3"]
+
+
+def test_update_short_earlier_page_fails_loudly(slow_portal, shelter_file) -> None:
+    """앞서 받은 쪽이 짧았으면(원천 이상) 실제로 받은 건수로 센다. 그래서 끝까지 가서 '일부만 수신' 실패로 드러난다.
+    쪽이 꽉 찼다고 가정해 세면 일찍 끝난 것으로 보고, 하루 동안 한 쪽씩만 받으며 조용히 멈춘다(리뷰)."""
+    import shelters
+
+    short = {"started": time.time(), "total": 10, "next_page": 4, "items": _items("shelter")[:8]}  # 3쪽 × 3건이면 9건
+    shelter_file.with_suffix(shelters.PARTIAL_SUFFIX).write_text(json.dumps(short), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="일부만 수신"):
+        shelters.update()
+
+
+def test_update_keeps_complete_pages_when_parse_fails(slow_portal, shelter_file, monkeypatch) -> None:
+    """다 받은 뒤 만들기(parse)가 실패하면 받은 원문을 남긴다. 고친 뒤에는 다시 받지 않고 바로 만든다."""
+    import shelters
+
+    monkeypatch.setattr(shelters, "FETCH_BUDGET_SECONDS", 1000)
+    real_parse = shelters.parse
+
+    def broken(items: list[dict]):
+        raise ValueError("가짜 원문 형식 변경")
+
+    monkeypatch.setattr(shelters, "parse", broken)
+    with pytest.raises(ValueError):
+        shelters.update()
+    assert len(_partial(shelter_file)["items"]) == 10 and not shelter_file.exists()
+    monkeypatch.setattr(shelters, "parse", real_parse)
+    slow_portal.urls.clear()
     assert shelters.update(force=True) is True
-    assert seen["budget_seconds"] == shelters.FETCH_BUDGET_SECONDS
+    assert slow_portal.urls == [] and len(pd.read_csv(shelter_file)) == 7
+    assert _partial(shelter_file) == {}
+
+
+def test_update_keeps_pages_on_failure(slow_portal, shelter_file, monkeypatch) -> None:
+    """한 쪽이 끝내 실패해도 그 앞까지 받은 쪽은 남긴다. 다음 시도는 그 쪽부터 잇는다(force 는 재시도 간격·상한 없이 끝까지)."""
+    import data_go_kr
+    import shelters
+
+    monkeypatch.setattr(shelters, "FETCH_BUDGET_SECONDS", 1000)  # 재시도 3번이 상한에 걸리지 않게
+    slow_portal.fail_on_page = 2
+    with pytest.raises(RuntimeError):
+        shelters.update()
+    saved = _partial(shelter_file)
+    assert (saved["next_page"], len(saved["items"])) == (2, 3)
+    assert data_go_kr.failed_recently(shelter_file, shelters.RETRY_SECONDS)
+    slow_portal.fail_on_page = None
+    slow_portal.urls.clear()
+    monkeypatch.setattr(shelters, "FETCH_BUDGET_SECONDS", 25)
+    assert shelters.update(force=True) is True
+    assert _pages(slow_portal.urls) == ["2", "3", "4"]
+    assert len(pd.read_csv(shelter_file)) == 7
 
 
 def test_nearby_seoul(client, shelter_data) -> None:
