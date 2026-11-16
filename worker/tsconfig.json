@@ -5,6 +5,7 @@
     "lib": ["es2024"],
     "module": "es2022",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true, // test/fixtures/shelters.json(make_shelters.py 생성물)을 import 한다
     "types": [],
     "strict": true,
     "noEmit": true,
