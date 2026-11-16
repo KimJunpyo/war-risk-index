@@ -172,14 +172,14 @@ curl.exe -s https://war-risk-api.war-risk-api.workers.dev/api/health   # 기대:
 
 ### 6.1 백업
 
-배치가 R2 올리기를 마친 뒤 하루 1회(KST) `state/`와 `manifest.json`을 `backup/<날짜>/`로 R2 안에서 복사한다. 날짜는 7개만 남긴다(#66). `manifest.json`이 있는 날짜만 다 된 백업이다.
+배치가 R2 올리기를 마친 뒤 하루 1회(KST), 러너의 `data/`·`out/`(막 올린 `state/`와 같다)과 `manifest.json`을 `backup/<날짜>/`로 올린다. 날짜는 7개만 남긴다(#66). `manifest.json`이 있는 날짜만 다 된 백업이다.
 
 ```powershell
 aws s3 ls "$B/backup/" @R2   # 날짜 목록
 aws s3 ls "$B/backup/<날짜>/manifest.json" @R2   # 기대: 한 줄(다 된 백업)
 ```
 
-R2 안 복사(버킷 → 버킷 `cp`·`sync`)에는 꼭 `--copy-props none`을 붙인다. 붙이지 않으면 aws CLI가 큰 파일의 태그를 복사하려고 `GetObjectTagging`을 부르는데, R2는 이를 지원하지 않아 실패한다.
+**R2 안 복사(버킷 → 버킷 `cp`·`sync`, CopyObject)는 쓰지 않는다.** aws CLI 판에 따라 R2가 지원하지 않는 헤더(`x-amz-tagging-directive`)나 호출(`GetObjectTagging`)을 써서 실패한다(2026-11-16 실측). 백업·복원은 받기와 올리기로만 한다.
 
 ### 6.2 리허설(운영 state를 건드리지 않음)
 
@@ -201,9 +201,14 @@ Remove-Item -Recurse -Force $T
 ```powershell
 gh workflow disable refresh.yml   # 갱신을 멈춘다(Worker 의 호출은 실패로 끝난다)
 gh run list --workflow refresh.yml --limit 3   # 기대: in_progress·queued 없음. 있으면 끝날 때까지 기다린다
-$D = "<날짜>"   # manifest.json 이 있는 날짜. 6.2 리허설을 먼저 한다
-aws s3 sync "$B/backup/$D/state/" "$B/state/" --delete --copy-props none @R2
-aws s3 cp "$B/backup/$D/manifest.json" "$B/manifest.json" --copy-props none @R2
+$D = "<날짜>"   # manifest.json 이 있는 날짜
+$T = Join-Path $env:TEMP "war-risk-restore"
+Remove-Item -Recurse -Force $T -ErrorAction SilentlyContinue
+aws s3 sync "$B/backup/$D/" $T @R2 --only-show-errors   # 백업을 받는다
+.venv\Scripts\python.exe batch.py --check-backup $T   # 기대: 다른 키 0개. 아니면 멈추고 다른 날짜를 고른다
+aws s3 sync "$T/state/" "$B/state/" --delete @R2 --only-show-errors   # state/ 를 백업과 똑같이 맞춘다
+aws s3 cp "$T/manifest.json" "$B/manifest.json" @R2
+Remove-Item -Recurse -Force $T
 gh workflow enable refresh.yml
 gh workflow run refresh.yml --ref main   # 기대: 성공. api/ 는 이 실행이 다시 만든다
 curl.exe -s https://war-risk-api.war-risk-api.workers.dev/api/health

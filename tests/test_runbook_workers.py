@@ -7,8 +7,8 @@
 - 워크플로가 쓰는 GitHub 시크릿(${{ secrets.X }}), Worker 시크릿(GITHUB_DISPATCH_TOKEN), 프론트 환경변수(NEXT_PUBLIC_*)가
   모두 런북에 있다(빠지면 다시 만들 때 놓친다).
 - Worker 이름(workers.dev 주소), Cron 시각, CORS 출처, 백업 접두사·보관 수가 설정 값과 같다.
-- 코드 블록의 R2 안 복사(aws s3 cp·sync 의 원본과 대상이 모두 버킷)에는 --copy-props none 이 붙는다
-  (R2 는 GetObjectTagging 을 지원하지 않아 큰 파일 복사가 실패한다, #66).
+- 코드 블록에 R2 안 복사(aws s3 cp·sync 의 원본과 대상이 모두 버킷, CopyObject)가 없다. aws CLI 판에 따라 R2 가
+  지원하지 않는 헤더(x-amz-tagging-directive)나 호출(GetObjectTagging)을 써서 실패한다(2026-11-16 실측). 받기·올리기만 쓴다.
 """
 
 import re
@@ -95,8 +95,8 @@ def test_backup_values_match_batch() -> None:
     assert f"{batch.BACKUP_KEEP}개만 남긴다" in text
 
 
-def test_r2_copies_skip_tagging() -> None:
-    """R2 안 복사 명령(코드 블록)에는 모두 --copy-props none 이 붙는다. 복사 명령이 하나도 없으면 테스트가 헛돈다."""
-    copies = [line for line in _split()[1] if R2_COPY.search(line)]
-    assert copies
-    assert not [line for line in copies if "--copy-props none" not in line]
+def test_no_r2_internal_copies() -> None:
+    """런북 명령에 R2 안 복사(버킷 → 버킷)가 없다. aws 명령을 하나도 못 찾으면 테스트가 헛돈다."""
+    code = _split()[1]
+    assert [line for line in code if "aws s3 " in line]
+    assert not [line for line in code if R2_COPY.search(line)]
