@@ -20,7 +20,8 @@
   // Workers Logs 를 끈다. 켜면 요청 URL(대피소 좌표 검색의 위치)이 남는다(#54). 실시간 확인은 wrangler tail 로 한다
   "observability": { "enabled": false },
   "vars": {
-    // 쉼표로 구분한 허용 출처(backend/app/main.py 의 CORS_ORIGINS 와 같은 뜻). Vercel 주소는 #55 에서 넣는다
-    "CORS_ORIGINS": "http://localhost:3000"
+    // 쉼표로 구분한 허용 출처(backend/app/main.py 의 CORS_ORIGINS 와 같은 뜻, 공백 없이). Vercel 운영 주소(#55)와 로컬 프론트.
+    // Vercel 미리보기 주소는 넣지 않는다(브랜치마다 달라서. 화면 확인은 운영 주소로 한다)
+    "CORS_ORIGINS": "http://localhost:3000,https://war-risk-index.vercel.app"
   }
 }
