@@ -2,7 +2,8 @@
  * 전쟁 가능성 지수 API Worker(#53). publish.py(#50)가 만들고 batch.py(#51)가 R2 api/ 에 올린 응답 JSON 을
  * 파싱하지 않고 그대로 흘려보낸다(무료 플랜 요청당 CPU 10ms). 경로·오류 문구·health 규칙은 backend/app/main.py 와 같다.
  * 대피소 위치·지역 검색(/api/shelters?…)은 publish 의 타일·지역 파일로 main.list_shelters 와 같은 응답을 만든다(#54).
- * news 는 아직 없다(#54).
+ * 뉴스(/api/{pairs|countries}/{id}/news)는 15분 배치(news_publish.py)가 받아 R2 api/news/… 에 올린 파일을 그대로 준다.
+ * Cloudflare 엣지에서는 Google News 가 503 을 줘서 Worker 가 직접 받지 않는다(#54).
  * Cron Trigger(scheduled)는 15분마다 갱신 워크플로(refresh.yml)를 수동 실행으로 부른다(#52).
  */
 
@@ -60,6 +61,13 @@ const NEARBY_CACHE = `private, max-age=${DAILY_MAX_AGE}`; // 위치가 든 URL �
 const REGION_CACHE = `public, max-age=${DAILY_MAX_AGE}`;
 // 대피소 경로의 예외는 이 문구로 바꿔 던진다. R2 오류 문구에 키(타일 = 위치)가 섞여 공통 catch 의 로그에 남지 않게
 const SHELTERS_FAILED = "대피소 조회 실패";
+// 뉴스(main.pair_news·country_news 와 같은 쿼리 규칙). 파일 키는 api/news/{pairs|countries}/{id}/{range}.json
+const NEWS_ROUTE = /^\/api\/(pairs|countries)\/([^/]+)\/news$/;
+const NEWS_RANGES = ["24h", "7d"]; // backend/app/news.RANGES 의 키. 첫 값이 기본값
+const NEWS_NAME_MAX_LENGTH = 40; // main.country_news 의 name 은 1~40자
+const NEWS_MAX_AGE = 600; // 지금 API 의 뉴스 캐시(news.CACHE_SECONDS 10분)와 맞춘다
+const NEWS_CACHE = `public, max-age=${NEWS_MAX_AGE}`;
+const NEWS_NOT_READY = "뉴스 조회 실패: 아직 수집 전"; // 대상은 있는데 배치가 아직 받지 못했을 때의 502 문구
 
 // 경로 파라미터가 없는 응답 → max-age. R2 키는 모든 경로에서 /api/x → api/x.json 이다
 const FIXED_ROUTES = new Map([
@@ -218,6 +226,29 @@ async function shelters(params: URLSearchParams, env: Env): Promise<Response> {
   return region ? regionShelters(env, region) : error(422, "lat·lon 또는 region 이 필요함");
 }
 
+/**
+ * GET /api/{pairs|countries}/{id}/news. FastAPI 처럼 쿼리 검사(range, 나라는 name)가 pair·code 확인보다 먼저다.
+ * 없는 대상은 다른 경로처럼 404(패턴 위반이거나 publish 가 대상마다 만드는 index.json 이 없음)이고,
+ * 대상은 있는데 뉴스 파일이 아직 없으면 지금 API 의 뉴스 장애처럼 502 다.
+ */
+async function news(kind: string, id: string, params: URLSearchParams, env: Env): Promise<Response> {
+  const pairs = kind === "pairs";
+  // 같은 이름이 여러 번 오면 FastAPI(Starlette)처럼 마지막 값을 쓴다
+  const range = params.getAll("range").at(-1) ?? NEWS_RANGES[0];
+  if (!NEWS_RANGES.includes(range)) return error(422, `range 는 ${NEWS_RANGES.join("·")} 만 지원함`);
+  // 나라 name 은 길이만 본다(Python len 처럼 코드 포인트로). 배치가 화면과 같은 이름으로 받아 두어 값은 쓰지 않는다
+  const name = params.getAll("name").at(-1) ?? "";
+  if (!pairs && (name === "" || [...name].length > NEWS_NAME_MAX_LENGTH)) {
+    return error(422, `name 은 1~${NEWS_NAME_MAX_LENGTH}자만 지원함`);
+  }
+  // 패턴에 어긋나면 R2 를 읽지 않는다
+  if (!(pairs ? PAIR_ID : COUNTRY_CODE).test(id) || !(await env.BUCKET.head(`api/${kind}/${id}/index.json`))) {
+    return error(404, `알 수 없는 ${pairs ? "국가 쌍" : "국가"}: ${id}`);
+  }
+  const object = await env.BUCKET.get(`api/news/${kind}/${id}/${range}.json`);
+  return object ? json(object.body, 200, NEWS_CACHE) : error(502, NEWS_NOT_READY);
+}
+
 async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") {
@@ -234,6 +265,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return shelters(url.searchParams, env).catch(() => {
       throw new Error(SHELTERS_FAILED);
     });
+  }
+  const newsRoute = NEWS_ROUTE.exec(url.pathname);
+  if (newsRoute) {
+    if (request.method !== "GET") return error(405, METHOD_NOT_ALLOWED);
+    return news(newsRoute[1], newsRoute[2], url.searchParams, env);
   }
   const found = route(url.pathname);
   if (!found) return error(404, NOT_FOUND);

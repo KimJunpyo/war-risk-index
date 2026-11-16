@@ -1,4 +1,4 @@
-"""15분 배치 진입점(#51): R2 받기 → live.update → 일별 갱신 → 응답 JSON 생성(publish) → R2 올리기.
+"""15분 배치 진입점(#51): R2 받기 → live.update → 일별 갱신 → 응답 JSON 생성(publish) → 뉴스(news_publish, #54) → R2 올리기.
 
 GitHub Actions 러너처럼 실행마다 비어 있는 환경에서 돈다. 상태(data/·out/)는 R2 state/ 에서 받고, 끝나면 바뀐 파일만
 다시 올린다(R2 무료 쓰기 월 100만 회). 응답 JSON(out/api)은 R2 api/ 로 올리고 Worker(#53)가 읽는다.
@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import live
+import news_publish
 import publish
 from backend.app import main
 
@@ -46,8 +47,9 @@ STATE_DIRS = {"data": ("gdelt_tmp/*", "npm_cache/*", *TEMP_FILES), "out": TEMP_F
 API_DIR = publish.OUT_DIR.relative_to(ROOT).as_posix()  # out/api: 응답 JSON. R2 에서는 api/ 아래
 STATE_PREFIX, API_PREFIX = "state/", "api/"
 MANIFEST_KEY = "manifest.json"
-# 받기 때 out/api 로 미리 받는 지난 응답(available 값이 있는 것). 빈 러너에서도 publish 의 공공데이터 유실 가드가 작동하게
-GUARDED_API = ("shelters/meta.json", "shelters/regions.json", "countries/*/embassies.json")
+# 받기 때 out/api 로 미리 받는 지난 응답. 공공데이터 응답(available 값이 있는 것)은 빈 러너에서도 publish 의 공공데이터 유실
+# 가드가 작동하게, 뉴스(news/*)는 뉴스 단계가 그 mtime 으로 다시 받을 때를 정하고 실패한 대상의 지난 값을 그대로 두게(#54)
+GUARDED_API = ("shelters/meta.json", "shelters/regions.json", "countries/*/embassies.json", f"{publish.NEWS_DIR}/*")
 ENDPOINT_ENV, BUCKET_ENV = "R2_ENDPOINT_URL", "R2_BUCKET"
 R2_ENV = (ENDPOINT_ENV, BUCKET_ENV, "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")  # 키 두 개는 aws CLI 가 직접 읽는다
 REGION = "auto"  # R2 는 region 을 auto 로 받는다
@@ -133,7 +135,7 @@ def _filter_args(option: str, patterns: tuple[str, ...]) -> list[str]:
 
 
 def download(root: Path) -> Manifest:
-    """R2 → 로컬: manifest, state/data/·state/out/(→ data/·out/), 공공데이터 응답(GUARDED_API).
+    """R2 → 로컬: manifest, state/data/·state/out/(→ data/·out/), 공공데이터 응답·뉴스(GUARDED_API).
 
     sync 가 0 으로 끝나도 manifest 의 state/ 키가 하나라도 로컬에 없으면 받기 실패다(덜 받은 상태로 돌고 올리지 않도록).
     받은 파일의 mtime 은 manifest 값으로 되돌린다.
@@ -160,7 +162,7 @@ def upload(root: Path, remote: Manifest, include_api: bool) -> None:
     내용이 같고 mtime 만 바뀐 파일은 올리지 않고 manifest 의 mtime 만 고친다.
     state/ 는 지우지 않는다. 로컬에 없으면 R2 객체와 manifest 항목을 그대로 두고 경고만 남긴다(다음 받기 때 다시 내려온다).
     include_api=False(publish 실패)면 api/ 도 올리지도 지우지도 않고 manifest 의 api/ 항목도 그대로 둔다.
-    그때 out/api 에는 받아 둔 공공데이터 응답만 있거나 아무것도 없을 수 있다.
+    그때 out/api 에는 받아 둔 공공데이터 응답·뉴스만 있거나 아무것도 없을 수 있다(그 실행에서 새로 받은 뉴스도 올리지 않는다).
     중간에 실패하면 manifest 를 올리지 않으므로 다음 실행이 같은 파일을 다시 올리고 지운다.
     """
     local = build_manifest(root)
@@ -222,9 +224,14 @@ def run(sync: bool = True) -> int:
             return 1
     # shortcut: _daily_refresh 는 아직 main.py 에 있다(_updater 도 부름), #55 에서 스레드를 지울 때 이 모듈로 옮길 것
     steps = {"live.update": live.update, "_daily_refresh": main._daily_refresh,
-             "publish.run": lambda: publish.run(ROOT / API_DIR)}
+             "publish.run": lambda: publish.run(ROOT / API_DIR),
+             "news_publish.run": lambda: news_publish.run(ROOT / API_DIR)}
     failed = []
     for name, job in steps.items():
+        if name == "news_publish.run" and "publish.run" in failed:
+            # publish 가 실패하면 api/ 를 올리지 않으므로 뉴스를 받아도 버려진다(Google 요청만 낭비)
+            log.warning("publish 실패로 뉴스 단계를 건너뜀")
+            continue
         try:
             job()
         except Exception:  # 한 단계 실패가 다음 단계와 올리기를 막지 않도록(_updater 와 같음)
