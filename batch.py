@@ -9,7 +9,8 @@ R2 키
   받은 파일의 mtime 을 되돌리는 까닭: 여행경보·대피소·하루 재계산의 "하루 1회" 판단이 파일 mtime 에 기댄다.
 - manifest 가 없으면(첫 업로드 전) 받기 실패로 끝난다. 첫 업로드는 #55.
 - 배치는 state/ 를 지우지 않는다. 지우는 것은 publish 가 성공했을 때 사라진 api/ 키뿐이다.
-- backup/<KST 날짜>/state/…·backup/<날짜>/manifest.json: 하루 1회 R2 안에서 복사한 백업(#55). BACKUP_KEEP 개만 남긴다.
+- backup/<KST 날짜>/state/…·backup/<날짜>/manifest.json: 하루 1회 올린 백업(#55). BACKUP_KEEP 개만 남긴다.
+  R2 안 복사(CopyObject)는 쓰지 않는다(aws CLI 판에 따라 R2 가 지원하지 않는 헤더·호출을 쓴다). 받기·올리기만 한다.
 
 환경변수: R2_ENDPOINT_URL, R2_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY(루트 .env 도 읽는다).
 aws CLI 가 PATH 에 있어야 한다(Actions 러너에는 기본으로 깔려 있다). Python 의존성은 늘지 않는다.
@@ -161,8 +162,13 @@ def download(root: Path) -> Manifest:
     return manifest
 
 
-def upload(root: Path, remote: Manifest, include_api: bool) -> None:
+def _manifest_text(manifest: Manifest) -> str:
+    return json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def upload(root: Path, remote: Manifest, include_api: bool) -> Manifest:
     """로컬 → R2: 새 파일·내용이 바뀐 파일만 aws 한 번으로 올리고, 로컬에 없는 api/ 키는 지운 뒤, manifest 를 마지막에 올린다.
+    올린 뒤 R2 에 있는 manifest 를 돌려준다(백업이 쓴다).
 
     내용이 같고 mtime 만 바뀐 파일은 올리지 않고 manifest 의 mtime 만 고친다.
     state/ 는 지우지 않는다. 로컬에 없으면 R2 객체와 manifest 항목을 그대로 두고 경고만 남긴다(다음 받기 때 다시 내려온다).
@@ -202,10 +208,10 @@ def upload(root: Path, remote: Manifest, include_api: bool) -> None:
                 raise RuntimeError(f"R2 삭제 실패 {len(errors)}건: {errors[0].get('Key')} 외")
         if local != remote:
             path = Path(tmp, MANIFEST_KEY)
-            path.write_text(json.dumps(local, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-                            encoding="utf-8")
+            path.write_text(_manifest_text(local), encoding="utf-8")
             _aws("s3", "cp", str(path), f"s3://{bucket}/{MANIFEST_KEY}")
     print(f"R2 올리기: 올린 키 {len(changed)}개, 지운 키 {len(gone)}개, manifest {'올림' if local != remote else '그대로'}")
+    return local
 
 
 def _today() -> str:
@@ -213,12 +219,14 @@ def _today() -> str:
     return datetime.now(KST).strftime("%Y-%m-%d")
 
 
-def backup() -> None:
-    """R2 state/ 와 manifest 를 backup/<오늘>/ 로 하루 1회 R2 안에서 복사하고, 날짜 백업은 BACKUP_KEEP 개만 남긴다(#55).
+def backup(root: Path, manifest: Manifest) -> None:
+    """올리기를 마친 로컬 data/·out/(= R2 state/)과 그 manifest 를 하루 1회 backup/<오늘>/ 로 올리고,
+    날짜 백업은 BACKUP_KEEP 개만 남긴다(#55).
 
-    올리기가 끝난 뒤 부른다. manifest 를 맨 나중에 복사하므로 manifest 가 있는 날짜만 다 된 백업으로 본다.
-    오늘 것이 덜 됐으면(복사 도중 실패) sync --delete 로 다시 맞춘다. 다 됐으면 나열(Class A) 한 번으로 끝난다.
-    복원은 런북(deploy/RUNBOOK.md)에 있다.
+    R2 안 복사(CopyObject)는 쓰지 않는다. aws CLI 판에 따라 R2 가 지원하지 않는 헤더(x-amz-tagging-directive)나
+    호출(GetObjectTagging)을 써서 실패한다(2026-11-16 Actions·로컬 실측). 그래서 매 실행 쓰는 업로드(PUT)로만 한다.
+    manifest 를 맨 나중에 올리므로 manifest 가 있는 날짜만 다 된 백업으로 본다. 오늘 것이 덜 됐으면 sync --delete 로
+    다시 맞춘다. 다 됐으면 나열(Class A) 한 번으로 끝난다. 복원은 런북(deploy/RUNBOOK.md 6절)에 있다.
     """
     bucket = os.environ[BUCKET_ENV]
     out = _aws("s3api", "list-objects-v2", "--bucket", bucket, "--prefix", BACKUP_PREFIX, "--output", "json")
@@ -227,10 +235,15 @@ def backup() -> None:
     today = _today()
     if f"{BACKUP_PREFIX}{today}/{MANIFEST_KEY}" not in keys:
         dest = f"s3://{bucket}/{BACKUP_PREFIX}{today}/"
-        # --copy-props none: aws 기본값은 큰 파일(멀티파트 복사)에서 객체 태그를 복사하려고 GetObjectTagging 을 부르는데,
-        # R2 는 NotImplemented 로 실패한다(2026-11-16 실측: 8MB 넘는 5개가 복사되지 않음)
-        _aws("s3", "sync", f"s3://{bucket}/{STATE_PREFIX}", dest + STATE_PREFIX, "--delete", "--copy-props", "none")
-        _aws("s3", "cp", f"s3://{bucket}/{MANIFEST_KEY}", dest + MANIFEST_KEY, "--copy-props", "none")
+        api_top, api_rest = API_DIR.split("/", 1)  # out/api 는 state/ 가 아니라 api/ 로 올라간다
+        for top, excludes in STATE_DIRS.items():
+            skip = (*excludes, f"{api_rest}/*") if top == api_top else excludes
+            _aws("s3", "sync", str(root / top), f"{dest}{STATE_PREFIX}{top}/", "--delete",
+                 *_filter_args("--exclude", skip))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, MANIFEST_KEY)
+            path.write_text(_manifest_text(manifest), encoding="utf-8")
+            _aws("s3", "cp", str(path), dest + MANIFEST_KEY)
         days.add(today)
         print(f"R2 백업: {BACKUP_PREFIX}{today}/")
     for day in sorted(days)[:-BACKUP_KEEP]:  # 날짜 이름(YYYY-MM-DD)이 오래된 순으로 정렬된다
@@ -285,13 +298,13 @@ def run(sync: bool = True) -> int:
             failed.append(name)
     if sync:
         try:
-            upload(ROOT, remote, include_api="publish.run" not in failed)
+            manifest = upload(ROOT, remote, include_api="publish.run" not in failed)
         except Exception:
             log.exception("R2 올리기 실패")
             failed.append("R2 올리기")
         else:  # 올리기가 실패하면 state/ 와 manifest 가 어긋났을 수 있어 백업하지 않는다
             try:
-                backup()
+                backup(ROOT, manifest)
             except Exception:
                 log.exception("R2 백업 실패")
                 failed.append("R2 백업")
