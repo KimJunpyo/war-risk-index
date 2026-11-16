@@ -16,6 +16,12 @@
     쿼리: serviceKey(unquote 한 키를 한 번만 인코딩) · pageNo(1부터) · numOfRows=page_size · returnType=json(대소문자 무관) · params.
     response.header.resultCode != "0" 이면 RuntimeError. items.item 이 dict 1건이면 [dict], 비었으면 [].
     totalCount 를 다 받을 때까지 pageNo 를 올린다. 국가 필터(cond[...]) 없이 전체를 받는다.
+    (#52) 한 쪽이 일시 오류(OSError·JSON 아님·response 없음)면 그 쪽만 PAGE_TRIES 번까지 다시 부른다(RETRY_PAUSE_SECONDS 쉼).
+    끝내 실패하면 RuntimeError(받은 건수를 메시지에, 원래 예외를 __cause__ 로). response 가 없으면 최상위 키 이름만 알린다.
+    budget_seconds(선택)를 넘기면 다음 요청 전에 RuntimeError. 시계는 data_go_kr.time.monotonic 이다.
+- (#52) 실패 시각: mark_failed(data_file) 은 data_file 옆 .failed 파일에 지금(epoch 초)을 적고,
+  failed_recently(data_file, seconds) 는 그 시각에서 seconds 가 안 지났으면 True(파일이 없거나 깨졌으면 False).
+  배치는 실행마다 새 프로세스라 메모리 값이 사라지지만, data/ 아래 파일은 R2 state 로 다음 실행에 넘어간다.
 - main.py 는 요청 시점에 ROOT / <모듈>.<파일 상수> 로 데이터 경로를 만든다(테스트가 상수를 tmp 경로로 바꿈).
 - main._daily_refresh 는 travel_advisory.update · shelters.update · embassies.update 를 각각 try/except +
   log.exception 으로 감싸, _recently_written 조기 반환보다 먼저 부른다.
@@ -28,6 +34,8 @@
     summary = remark, url = "https://www.0404.go.kr" 로 시작. 매핑 실패는 failed 에 country_nm.
     한 나라 여러 행은 기존 dedupe() 가 최고 단계 하나로 줄인다.
 - update(): 키 없음 → 외교부 행 0건(직전 값도 버림), data.go.kr 호출 없음. 외교부 호출 실패 → 직전 외교부 행 유지.
+- (#52) shelters·embassies update 는 실패하면 mark_failed(데이터 파일)을 부르고, force 가 아니면
+  failed_recently(데이터 파일, RETRY_SECONDS) 동안 부르지 않는다. 대피시설은 fetch_all 에 budget_seconds 를 넘긴다.
   어느 경우든 미·영은 정상 갱신.
 - GET /api/countries: 키 없으면 advisory 에서 kr_mofa 를 뺀다(CSV 에 남아 있어도). us_state·uk_fcdo 는 키 유무와 무관.
 
@@ -67,9 +75,12 @@
 수동: 실제 키로 수집(행 수·totalCount 대조, 연결 안 되는 나라 목록), compileall, uvicorn 30초 Traceback, PR 설명 항목.
 """
 
+import http.client
+import importlib
 import json
 import logging
 import re
+import time
 import urllib.parse
 from datetime import date
 from pathlib import Path
@@ -112,6 +123,7 @@ class FakePortal:
 
     def __init__(self, routes: dict[str, list[dict]], fail_on_page: int | None = None, result_code: str = "0"):
         self.routes, self.fail_on_page, self.result_code = routes, fail_on_page, result_code
+        self.fail_times: int | None = None  # fail_on_page 가 실패하는 횟수(None = 늘 실패). 그 뒤로는 정상
         self.urls: list[str] = []
 
     def __call__(self, url: str) -> dict:
@@ -119,7 +131,9 @@ class FakePortal:
         u = urllib.parse.urlsplit(url)
         q = dict(urllib.parse.parse_qsl(u.query))
         page, rows = int(q.get("pageNo", 1)), int(q.get("numOfRows", 10))
-        if page == self.fail_on_page:
+        if page == self.fail_on_page and self.fail_times != 0:
+            if self.fail_times is not None:
+                self.fail_times -= 1
             raise OSError("가짜 네트워크 실패")
         items = self.routes.get(u.path, [])
         chunk = items[(page - 1) * rows: page * rows]
@@ -135,6 +149,7 @@ def portal(monkeypatch):
 
     fake = FakePortal({TRAVEL_PATH: _items("travel"), EMBASSY_PATH: _items("embassy"), SHELTER_PATH: _items("shelter")})
     monkeypatch.setattr(data_go_kr, "_get_json", fake)
+    monkeypatch.setattr(data_go_kr, "RETRY_PAUSE_SECONDS", 0)  # 쪽 재시도 사이에 쉬지 않게
     monkeypatch.setenv(KEY_ENV, ENCODED_KEY)
     return fake
 
@@ -206,6 +221,172 @@ def test_fetch_all_without_key_makes_no_call(no_key) -> None:
     with pytest.raises(RuntimeError):
         data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 100)
     assert no_key.urls == []
+
+
+def _pages(urls: list[str]) -> list[str]:
+    return [urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)["pageNo"][0] for u in urls]
+
+
+class FakeClock:
+    """data_go_kr.time 대체(monotonic·time·sleep). 테스트가 now 를 직접 옮긴다."""
+
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_fetch_all_retries_transient_page_failure(portal) -> None:
+    """한 쪽이 일시 오류면 그 쪽만 다시 불러 이어 받는다(대피시설 API 는 가끔 수십 초 멈추거나 5xx 를 준다, #52)."""
+    import data_go_kr
+
+    portal.fail_on_page, portal.fail_times = 2, data_go_kr.PAGE_TRIES - 1
+    assert data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 2) == _items("travel")
+    assert _pages(portal.urls) == ["1", *["2"] * data_go_kr.PAGE_TRIES, "3"]
+
+
+def test_fetch_all_gives_up_after_tries(portal) -> None:
+    """한 쪽이 PAGE_TRIES 번 모두 실패하면 RuntimeError. 받은 건수를 알리고 원래 예외를 남긴다."""
+    import data_go_kr
+
+    portal.fail_on_page = 2
+    with pytest.raises(RuntimeError, match=f"2/{len(_items('travel'))}건") as info:
+        data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 2)
+    assert isinstance(info.value.__cause__, OSError)
+    assert _pages(portal.urls) == ["1", *["2"] * data_go_kr.PAGE_TRIES]
+
+
+def test_fetch_all_response_without_body(portal, monkeypatch) -> None:
+    """response 가 없는 응답(배치 로그의 KeyError: 'response')도 일시 오류로 다시 부른다.
+    끝내 그러면 최상위 키 이름만 알린다(값에 무엇이 섞였을지 몰라 남기지 않음)."""
+    import data_go_kr
+
+    bad = {"resultCode": "99", "resultMsg": "가짜 오류 문구"}
+    calls: list[str] = []
+
+    def once_bad(url: str) -> dict:
+        calls.append(url)
+        return bad if len(calls) == 1 else portal(url)
+
+    monkeypatch.setattr(data_go_kr, "_get_json", once_bad)
+    assert data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 100) == _items("travel")
+    assert len(calls) == 2
+    monkeypatch.setattr(data_go_kr, "_get_json", lambda url: bad)
+    with pytest.raises(RuntimeError) as info:
+        data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 100)
+    cause = str(info.value.__cause__)
+    assert "resultCode" in cause and "resultMsg" in cause and "가짜 오류 문구" not in cause
+
+
+@pytest.mark.parametrize("first", [http.client.IncompleteRead(b"{"), {"response": None}])
+def test_fetch_all_retries_cut_or_odd_response(portal, monkeypatch, first) -> None:
+    """본문이 도중에 끊기거나(IncompleteRead, OSError 가 아님) response 가 dict 가 아니어도 그 쪽을 다시 부른다."""
+    import data_go_kr
+
+    calls: list[str] = []
+
+    def once(url: str) -> dict:
+        calls.append(url)
+        if len(calls) > 1:
+            return portal(url)
+        if isinstance(first, Exception):
+            raise first
+        return first
+
+    monkeypatch.setattr(data_go_kr, "_get_json", once)
+    assert data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 100) == _items("travel")
+    assert len(calls) == 2
+
+
+def test_fetch_all_gateway_error_code(portal, monkeypatch) -> None:
+    """게이트웨이 오류(OpenAPI_ServiceResponse)는 표준 코드·문구를 알린다(2026-11 대피시설이 04 HTTP_ERROR 를 20초 만에 줌)."""
+    import data_go_kr
+
+    head = {"errMsg": "HTTP_ERROR", "returnAuthMsg": "HTTP 에러", "returnReasonCode": "04"}
+    monkeypatch.setattr(data_go_kr, "_get_json", lambda url: {"OpenAPI_ServiceResponse": {"cmmMsgHeader": head}})
+    with pytest.raises(RuntimeError) as info:
+        data_go_kr.fetch_all("https://apis.data.go.kr" + SHELTER_PATH, 100)
+    assert "04 HTTP 에러" in str(info.value.__cause__)
+
+
+def test_fetch_all_stops_at_budget(portal, monkeypatch) -> None:
+    """budget_seconds 를 넘기면 다음 요청 전에 멈추고 받은 건수를 알린다(배치가 워크플로 제한 시간 안에 끝나게, #52)."""
+    import data_go_kr
+
+    clock = FakeClock()
+    monkeypatch.setattr(data_go_kr, "time", clock)
+
+    def slow(url: str) -> dict:
+        clock.now += 10  # 요청 하나에 10초
+        return portal(url)
+
+    monkeypatch.setattr(data_go_kr, "_get_json", slow)
+    with pytest.raises(RuntimeError, match=f"3/{len(_items('travel'))}건"):
+        data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 1, budget_seconds=25)
+    assert _pages(portal.urls) == ["1", "2", "3"]  # 30초째(4쪽 앞)에 멈춤
+    assert data_go_kr.fetch_all("https://apis.data.go.kr" + TRAVEL_PATH, 1) == _items("travel")  # 상한이 없으면 끝까지
+
+
+def test_failure_time_file(tmp_path, monkeypatch) -> None:
+    """mark_failed 는 데이터 파일 옆 .failed 에 지금을 적고, failed_recently 는 그때부터 seconds 동안만 True(#52)."""
+    import data_go_kr
+
+    clock = FakeClock(1_000_000.0)
+    monkeypatch.setattr(data_go_kr, "time", clock)
+    data_file = tmp_path / "data" / "x.csv"
+    assert data_go_kr.failed_recently(data_file, 60) is False  # 파일 없음
+    data_go_kr.mark_failed(data_file)
+    assert data_file.with_suffix(".failed").is_file() and not data_file.exists()
+    clock.now += 59
+    assert data_go_kr.failed_recently(data_file, 60) is True
+    clock.now += 1
+    assert data_go_kr.failed_recently(data_file, 60) is False
+    data_file.with_suffix(".failed").write_text("깨진 값", encoding="utf-8")
+    assert data_go_kr.failed_recently(data_file, 60) is False
+    data_file.with_suffix(".failed").write_text(f"{clock.now + 3600:.0f}\n", encoding="utf-8")  # 미래 시각
+    assert data_go_kr.failed_recently(data_file, 60) is False
+
+
+@pytest.mark.parametrize(("module_name", "file_attr"), [("shelters", "SHELTER_FILE"), ("embassies", "EMBASSY_FILE")])
+def test_update_skips_while_failed_recently(portal, monkeypatch, tmp_path, module_name: str, file_attr: str) -> None:
+    """실패 시각이 파일에 남아, 다음 실행(새 프로세스)도 RETRY_SECONDS 동안 다시 부르지 않는다. force 는 무시한다(#52).
+    예전에는 프로세스 메모리에 둬서, 실행마다 새로 뜨는 배치가 15분마다 대피시설 전량을 다시 받다 10분 제한에 걸렸다."""
+    module = importlib.import_module(module_name)
+    data_file = tmp_path / f"{module_name}.csv"
+    monkeypatch.setattr(module, file_attr, data_file)
+    marker = data_file.with_suffix(".failed")
+    portal.result_code = "30"
+    with pytest.raises(RuntimeError):
+        module.update()
+    assert time.time() - float(marker.read_text(encoding="utf-8")) < 60
+    portal.result_code = "0"
+    portal.urls.clear()
+    assert module.update() is False and portal.urls == []  # 지난 실행이 방금 실패
+    marker.write_text(f"{time.time() - module.RETRY_SECONDS - 1:.0f}\n", encoding="utf-8")
+    assert module.update() is True and portal.urls  # 재시도 간격이 지남
+    marker.write_text(f"{time.time():.0f}\n", encoding="utf-8")
+    data_file.unlink()
+    assert module.update(force=True) is True
+
+
+def test_failure_files_go_to_r2_state() -> None:
+    """.failed 파일은 배치가 R2 state 로 올리고 다음 실행에 받는 대상이다(제외 패턴에 걸리지 않음, #52)."""
+    import fnmatch
+
+    import batch
+    import embassies
+    import shelters
+
+    for data_file in (shelters.SHELTER_FILE, embassies.EMBASSY_FILE):
+        rel = data_file.with_suffix(".failed").relative_to("data").as_posix()
+        assert not any(fnmatch.fnmatch(rel, p) for p in batch.STATE_DIRS["data"]), rel
 
 
 def test_daily_refresh_survives_m4_failures(monkeypatch, caplog) -> None:
@@ -431,6 +612,22 @@ def test_update_failure_keeps_old_file(portal, shelter_data, monkeypatch) -> Non
     with pytest.raises(Exception):
         shelters.update(force=True)
     assert shelter_data.read_bytes() == before
+
+
+def test_update_has_time_budget(portal, shelter_file, monkeypatch) -> None:
+    """대피시설 전량(약 190쪽)은 시간 상한 안에서만 받는다(배치 10분 제한, #52)."""
+    import shelters
+
+    seen: dict = {}
+    real = shelters.data_go_kr.fetch_all
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(shelters.data_go_kr, "fetch_all", spy)
+    assert shelters.update(force=True) is True
+    assert seen["budget_seconds"] == shelters.FETCH_BUDGET_SECONDS
 
 
 def test_nearby_seoul(client, shelter_data) -> None:

@@ -17,7 +17,11 @@ SHELTER_FILE = Path("data/shelters.csv")
 PAGE_SIZE = 100  # 포털 numOfRows 최대
 MAX_PAGES = 400  # 약 1.9만 건 / 100. data_go_kr 기본 상한(50쪽)으로는 모자람
 REFRESH_SECONDS = 20 * 3600  # 파일이 이보다 새로우면 다시 받지 않음(하루 1회)
-RETRY_SECONDS = 6 * 3600  # 실패 뒤 이 시간 동안은 전량 재수신하지 않음(15분 주기 갱신 루프 대비)
+# 실패 뒤 이 시간 동안은 전량 재수신하지 않음(15분 주기 갱신 대비). 실패 시각은 data_go_kr.mark_failed 가 파일에 남긴다
+RETRY_SECONDS = 6 * 3600
+# 한 번 받기(약 190쪽)에 쓸 수 있는 시간(#52). 정상일 때 쪽당 로컬 0.3~0.5초이고, 러너는 왕복 시간이 더해져 3~4분으로 본다(추정).
+# 15분 배치의 워크플로 제한(refresh.yml timeout-minutes)은 이 값을 넣어 잡았다
+FETCH_BUDGET_SECONDS = 5 * 60
 EARTH_RADIUS_M = 6371008.8  # 평균 지구 반지름
 IN_USE = "사용중"
 COLUMNS = ["mng_no", "name", "address", "sido", "sigungu", "lat", "lon", "capacity", "kind", "updated"]
@@ -28,7 +32,6 @@ SIDO = ("서울특별시", "부산광역시", "대구광역시", "인천광역�
 # 옛 이름 → 현행 이름
 SIDO_ALIASES = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도", "제주도": "제주특별자치도"}
 SIGUNGU_SUFFIXES = ("시", "군", "구")
-_last_failure = 0.0  # 마지막 실패 시각(프로세스 메모리, 재시작하면 초기화)
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -72,22 +75,23 @@ def update(force: bool = False) -> bool:
         return False
     if not force and SHELTER_FILE.exists() and time.time() - SHELTER_FILE.stat().st_mtime < REFRESH_SECONDS:
         return False
-    global _last_failure
-    if not force and time.time() - _last_failure < RETRY_SECONDS:
+    if not force and data_go_kr.failed_recently(SHELTER_FILE, RETRY_SECONDS):
         return False
+    started = time.monotonic()
     try:
-        items = data_go_kr.fetch_all(SHELTER_URL, PAGE_SIZE, max_pages=MAX_PAGES)
+        items = data_go_kr.fetch_all(SHELTER_URL, PAGE_SIZE, max_pages=MAX_PAGES, budget_seconds=FETCH_BUDGET_SECONDS)
         df = parse(items)
         if df.empty:  # 정상 응답 0건도 실패로 보고 직전 파일 유지
             raise RuntimeError("대피시설 0건")
     except Exception:
-        _last_failure = time.time()
+        data_go_kr.mark_failed(SHELTER_FILE)
         raise
     SHELTER_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = SHELTER_FILE.with_suffix(".csv.part")
     df.to_csv(tmp, index=False, encoding="utf-8")
     tmp.replace(SHELTER_FILE)
-    print(f"대피시설: 원문 {len(items)}건 → 저장 {len(df)}건")
+    # 걸린 시간은 FETCH_BUDGET_SECONDS 를 실제 값으로 맞추는 근거다(배치 로그)
+    print(f"대피시설: 원문 {len(items)}건 → 저장 {len(df)}건, {time.monotonic() - started:.0f}초")
     return True
 
 

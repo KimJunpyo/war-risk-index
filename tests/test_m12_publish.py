@@ -223,8 +223,7 @@ def test_embassy_refresh_by_collected_date(tmp_path: Path, monkeypatch: pytest.M
     path = tmp_path / "embassies.csv"
     collected = (datetime.now(embassies.KST) - timedelta(days=collected_days_ago)).strftime("%Y-%m-%d")
     path.write_text(f"iso2,name,{embassies.COLLECTED_COLUMN}\nJP,x,{collected}\n", encoding="utf-8")  # mtime = 지금
-    monkeypatch.setattr(embassies, "EMBASSY_FILE", path)
-    monkeypatch.setattr(embassies, "_last_failure", 0.0)
+    monkeypatch.setattr(embassies, "EMBASSY_FILE", path)  # 실패 시각 파일(.failed)도 tmp 옆이라 없음
     monkeypatch.setenv(KEY_ENV, "test-key")
     calls: list[str] = []
     monkeypatch.setattr(embassies.data_go_kr, "fetch_all", lambda url, *_: calls.append(url) or [EMBASSY_ITEM])

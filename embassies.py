@@ -17,7 +17,8 @@ EMBASSY_URL = "https://apis.data.go.kr/1262000/EmbassyService2/getEmbassyList2"
 EMBASSY_FILE = Path("data/embassies.csv")
 PAGE_SIZE = 100
 REFRESH_SECONDS = 20 * 3600  # 수집일 열이 없는 예전 파일만: mtime 이 이보다 새로우면 다시 받지 않음
-RETRY_SECONDS = 6 * 3600  # 실패 뒤 이 시간 동안은 재수신하지 않음(15분 주기 갱신 루프 대비)
+# 실패 뒤 이 시간 동안은 재수신하지 않음(15분 주기 갱신 대비). 실패 시각은 data_go_kr.mark_failed 가 파일에 남긴다
+RETRY_SECONDS = 6 * 3600
 EMBASSY_TYPE_CODE = "10"  # embassy_ty_cd: 10 대사관, 20 총영사관 등
 COLUMNS = ["iso2", "name", "kind", "kind_cd", "address", "tel", "emergency_tel"]
 # 수집일(KST) 열. 표시 날짜와 재수신 판단(하루 1회)에 쓴다. 파일 mtime 은 복사·복원(배치 환경)하면 바뀌고 시간대도 달라 쓰지 않는다
@@ -29,7 +30,6 @@ CALL_CENTER = {"tel": "02-3210-0404", "tel_overseas": "+82-2-3210-0404", "source
 # 좌표·주소 국가로 거르는 일반 규칙은 겸임 공관(코소보 → 빈 주재 대사관)까지 지워서 쓰지 않음.
 # shortcut: 확인한 오류만 뺌, 원문이 고쳐지거나 새 오류가 보이면 이 목록을 갱신할 것
 KNOWN_BAD = (("MX", "주 멕시코 대한민국 대사관", "La Habana"),)
-_last_failure = 0.0  # 마지막 실패 시각(프로세스 메모리, 재시작하면 초기화)
 _warned_no_key = False  # 키 없음 안내는 프로세스당 한 번만(15분 주기 갱신 루프 대비)
 
 
@@ -64,7 +64,7 @@ def _collected_today() -> bool:
 
 def update(force: bool = False) -> bool:
     """하루 1회 받아 저장. 키 없으면 False(호출·쓰기 없음). 실패는 예외로 올리고 기존 파일은 그대로."""
-    global _last_failure, _warned_no_key
+    global _warned_no_key
     if not data_go_kr.service_key():
         if not _warned_no_key:
             print(f"재외공관: {data_go_kr.KEY_ENV} 없음, 건너뜀")
@@ -72,7 +72,7 @@ def update(force: bool = False) -> bool:
         return False
     if not force and _collected_today():
         return False
-    if not force and time.time() - _last_failure < RETRY_SECONDS:
+    if not force and data_go_kr.failed_recently(EMBASSY_FILE, RETRY_SECONDS):
         return False
     try:
         items = data_go_kr.fetch_all(EMBASSY_URL, PAGE_SIZE)
@@ -80,7 +80,7 @@ def update(force: bool = False) -> bool:
         if df.empty:  # 정상 응답 0건도 실패로 보고 직전 파일 유지
             raise RuntimeError("재외공관 0건")
     except Exception:
-        _last_failure = time.time()
+        data_go_kr.mark_failed(EMBASSY_FILE)
         raise
     df = df.assign(**{COLLECTED_COLUMN: datetime.now(KST).strftime("%Y-%m-%d")})
     EMBASSY_FILE.parent.mkdir(parents=True, exist_ok=True)

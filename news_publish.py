@@ -35,7 +35,7 @@ SLACK_SECONDS = 5 * 60  # 15분 예약 실행이 몇 분 일찍 돌아도 그 �
 REQUEST_GAP_SECONDS = 0.3  # 요청 사이에 쉬는 시간
 ABORT_AFTER = 5  # 처음 이 건수가 모두 실패하면 막힌 것으로 보고 나머지를 부르지 않는다(막힌 동안 요청을 쏟지 않게)
 # 한 실행에서 뉴스 단계가 쓸 수 있는 시간. 두 범위를 다 받으면 약 2분(2026-11 기준 대상 99개 × 2, 요청·쉬는 시간 약 0.6초)이고,
-# 워크플로 timeout-minutes(10분) 안에 일별 재계산·올리기까지 끝나야 한다
+# 워크플로 timeout-minutes(14분, refresh.yml 에 최악 계산) 안에 일별 재계산·대피시설·올리기까지 끝나야 한다
 BUDGET_SECONDS = 180
 log = main.log
 assert set(REFRESH_SECONDS) == set(RANGES)  # fetch_news 의 범위와 동기화
