@@ -2,18 +2,16 @@
 Windows에서는 --loop asyncio:SelectorEventLoop 를 붙인다(기본 Proactor 루프는 연결 수락 오류 시 서버 소켓을 닫아 이후 연결을 모두 거부).
 루트 .env 가 있으면 시작 시 읽는다(.env.example 참고, 이미 설정된 환경변수가 우선).
 
-시작하면 백그라운드 스레드가 15분마다 GDELT 2.0 실시간 슬롯을 갱신하고,
-새 GDELT 1.0 일별 파일이 나오면 수집·지수 계산을 다시 돌린다.
+운영 API 는 Cloudflare Worker(worker/)이고, 이 앱은 로컬 개발과 생성 파일(publish.py) 회귀 기준용이다.
+데이터 갱신(실시간 슬롯·일별 수집·지수 계산)은 15분 배치(batch.py)가 한다. 로컬에서는 python batch.py --no-sync
 """
 
 import logging
 import math
 import os
-import threading
 import time
 import urllib.parse
 import urllib.request
-from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -53,8 +51,6 @@ COUNTRY_META_FILE = ROOT / build_country_index.COUNTRY_META_FILE
 CATALYST_ALL_FILE = ROOT / country_collect.CATALYST_ALL_FILE
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 GZIP_MINIMUM_SIZE = 1000  # 이 바이트보다 작은 응답은 압축하지 않음
-LIVE_UPDATES = os.getenv("LIVE_UPDATES", "1") == "1"
-LIVE_INTERVAL_SECONDS = live.SLOT_MINUTES * 60
 COLLECTOR_IDLE_SECONDS = 600  # 이 시간 안에 수집 파일이 바뀌었으면 수동 수집 중으로 보고 일별 갱신을 미룸
 LIVE_STALE_MINUTES = 60  # /api/health: 최신 실시간 슬롯이 이 분을 넘게 지났으면 503
 INDEX_STALE_DAYS = 3  # /api/health: 일별 지수 최신 날짜가 이 일수를 넘게 지났으면 503
@@ -192,25 +188,9 @@ def _daily_refresh() -> None:
         build_country_index.main()
 
 
-def _updater() -> None:
-    while True:
-        for job in (live.update, _daily_refresh):
-            try:
-                job()
-            except Exception:  # 한 주기 실패가 스레드를 죽이지 않도록
-                log.exception("갱신 실패: %s", job.__name__)
-        # shortcut: 시작 시각 기준 15분 간격. GDELT 발행 시각에 맞추려면 lastupdate 폴링 주기를 줄일 것
-        time.sleep(LIVE_INTERVAL_SECONDS)
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    if LIVE_UPDATES:
-        threading.Thread(target=_updater, daemon=True, name="live-updater").start()
-    yield
-
-
-app = FastAPI(title="War Risk Index API", version="1.1", lifespan=lifespan)
+# 갱신은 15분 배치(batch.py, GitHub Actions)가 한다. 이 API 는 운영에서 돌지 않고 로컬 개발·생성 파일 회귀 기준용이라
+# 스스로 갱신하지 않는다(#55에서 갱신 스레드를 지움). 로컬 데이터 갱신: python batch.py --no-sync
+app = FastAPI(title="War Risk Index API", version="1.1")
 # 나중에 추가한 미들웨어가 바깥(CORS 가 GZip 을 감쌈). 어느 순서든 응답 헤더는 같고, CORS 가 바깥이면 preflight 에 압축 단계 없이 바로 답함
 app.add_middleware(GZipMiddleware, minimum_size=GZIP_MINIMUM_SIZE)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET"])
@@ -544,7 +524,7 @@ def freshness() -> tuple[str | None, str | None]:
 @app.head("/api/health")  # HEAD 로 확인하는 감시 서비스용(GET 만 등록하면 405). api_route 는 두 메서드에 같은 operationId 를 붙임
 def health() -> JSONResponse:
     """최신 실시간 슬롯이 LIVE_STALE_MINUTES 분, 일별 지수 날짜가 INDEX_STALE_DAYS 일 이내면 200, 아니면 503.
-    파일·값이 없으면 그 파일의 두 필드는 null 이고 503. LIVE_UPDATES=0 이어도 같은 기준이다."""
+    파일·값이 없으면 그 파일의 두 필드는 null 이고 503."""
     now = _utcnow()
     live_as_of, index_date = freshness()
     live_age = index_age = None
