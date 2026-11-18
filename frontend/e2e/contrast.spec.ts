@@ -259,6 +259,57 @@ const STATES: State[] = [
       await expect(calcOf(page).getByText("1~20 사이 정수로 입력해 주세요").first(), "빈칸 안내").toBeVisible();
     },
   },
+  {
+    // #107 장보기 목록: 목록·안내·근거·출처가 다 보인 뒤 잰다(계약은 emergency-shopping.spec.ts)
+    name: "장보기 목록(4명·7일)",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      await calcOf(page).getByRole("radiogroup", { name: "기간", exact: true }).getByRole("radio", { name: "7일 비축", exact: true }).click();
+      await peopleOf(page).fill(KIT_PEOPLE);
+      await expect(calcOf(page).getByText("2L 생수 6병 묶음 7팩(42병, 약 84kg)").first(), "4명·7일 장보기 목록").toBeVisible();
+    },
+  },
+  {
+    name: "장보기 목록(3일 가방)",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      await calcOf(page).getByRole("radiogroup", { name: "기간", exact: true }).getByRole("radio", { name: "3일 가방", exact: true }).click();
+      await peopleOf(page).fill(KIT_PEOPLE);
+      for (const text of ["가방에 넣을 몫", "집에 둘 몫"]) await expect(calcOf(page).getByText(text).first(), text).toBeVisible();
+    },
+  },
+  {
+    // #107 복사 안내(기본 4명·7일). 가짜 클립보드는 누르기 직전에 넣는다(navigator.clipboard 는 누를 때 읽는 계약)
+    name: "복사 안내",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      await page.evaluate(() => {
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.resolve() } });
+      });
+      const copy = calcOf(page).getByRole("button", { name: "장보기 목록 복사", exact: true });
+      await expect(copy, "장보기 목록 복사").toBeVisible();
+      await copy.click();
+      await expect(calcOf(page).getByText("복사했습니다").first(), "복사 안내").toBeVisible();
+    },
+  },
+  {
+    // 실패 안내는 성공 안내와 글자 색이 다를 수 있어 따로 잰다(navigator.clipboard 없음)
+    name: "복사 실패 안내",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      await page.evaluate(() => {
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+      });
+      const copy = calcOf(page).getByRole("button", { name: "장보기 목록 복사", exact: true });
+      await expect(copy, "장보기 목록 복사").toBeVisible();
+      await copy.click();
+      await expect(calcOf(page).getByText("복사하지 못했습니다").first(), "복사 실패 안내").toBeVisible();
+    },
+  },
 ];
 
 // 측정 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
