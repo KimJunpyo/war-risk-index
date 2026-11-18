@@ -1,7 +1,7 @@
 // 비상 가방(3일)·가정 비축(7일 이상) 목록과 물·식량 계산. node --test 로 바로 돌리므로 별칭(@/) import 없이 단일 파일로 둔다.
 // 문구는 KIT_SOURCES 의 공식 안내를 바탕으로 자체 작성했다(공식 문장 인용 아님). 항목마다 근거가 된 출처 키를 단다.
 
-export type KitSourceKey = "mois-emergency" | "mcf" | "bbk";
+export type KitSourceKey = "mois-emergency" | "mcf" | "bbk" | "maff" | "maff-water" | "maff-carry";
 
 export interface KitItem {
   id: string; // 문장이 바뀌어도 유지되는 고정 값. 체크 상태 저장 키라 바꾸면 기존 체크가 풀린다
@@ -47,6 +47,22 @@ export const KIT_SOURCES: Record<KitSourceKey, { name: string; url: string; chec
   bbk: {
     name: "독일 BBK 비축",
     url: "https://www.bbk.bund.de/DE/Warnung-Vorsorge/Vorsorge/So-koennen-Sie-sich-vorbereiten/Bevorraten/bevorraten_node.html",
+    checkedAt: "2026-11-18",
+  },
+  // 장보기 환산(shopping.ts) 근거. 목록 항목은 가리키지 않는다
+  maff: {
+    name: "일본 농림수산성 가정 비축 예(aff 2026년 3월호)",
+    url: "https://www.maff.go.jp/j/pr/aff/2603/spe1_01.html",
+    checkedAt: "2026-11-18",
+  },
+  "maff-water": {
+    name: "일본 농림수산성 식품 비축 가이드: 물",
+    url: "https://www.maff.go.jp/j/zyukyu/foodstock/chapter05.html",
+    checkedAt: "2026-11-18",
+  },
+  "maff-carry": {
+    name: "일본 농림수산성 식품 비축 가이드: 재해 발생 당일",
+    url: "https://www.maff.go.jp/j/zyukyu/foodstock/chapter06.html",
     checkedAt: "2026-11-18",
   },
 };
