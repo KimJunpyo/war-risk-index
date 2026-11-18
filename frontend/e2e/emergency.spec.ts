@@ -8,6 +8,8 @@ import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 //
 // 화면 선택자 계약 (구현은 이 계약을 따른다)
 // - 경로 /emergency, 내용은 <main> 안. <title> 에 "비상 대비", canonical 은 /emergency(절대 주소면 경로가 /emergency)
+// - 공유 미리보기(이슈 #98): og:url 경로가 /emergency, og·twitter 제목은 h1 글자, 설명은 description 과 같다.
+//   루트 값(og:site_name·locale·type, 파일 기반 og:image /opengraph-image)은 그대로 붙는다. 푸터(SiteFooter)는 HTML 에 있다
 // - 머리말: h1(페이지에 하나) "비상 대비 안내", 접근 이름에 "전체 지도"가 든 링크 하나(글자 "← 전체 지도", href="/"),
 //   고지 문구 NOTICE(문장 사이를 줄바꿈·다른 요소로 나눠도 됨)
 // - 목차: 접근 이름 "목차"인 navigation. 경보 링크 5개가 CIVIL_ALERTS 순서로 href="#<경보 id>", 글자는 경보 이름 그대로.
@@ -67,6 +69,9 @@ const step = (w: number) => (w >= XL ? 3 : w >= LG ? 2 : w >= MD ? 1 : 0);
 const isApi = (url: string) => url.startsWith(API_BASE_URL) || new URL(url).pathname.startsWith("/api/");
 /** 경보 카드: id 가 경보 id 인 요소 */
 const cardOf = (page: Page, id: string) => page.locator(`[id="${id}"]`);
+/** <meta property|name="key"> 의 content */
+const metaOf = (markup: string, key: string) =>
+  markup.match(new RegExp(`<meta\\b[^>]*\\b(?:property|name)="${key}"[^>]*>`))?.[0].match(/\bcontent="([^"]*)"/)?.[1];
 
 async function box(l: Locator) {
   const b = await l.boundingBox();
@@ -120,7 +125,7 @@ async function open(page: Page, width: number) {
 // 내용 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
 test.describe.configure({ timeout: TEST_TIMEOUT_MS });
 
-test("자바스크립트 실행 전 HTML: 경보 이름 5개·safekorea.go.kr 출처 링크, <title>·canonical", async ({ request }) => {
+test("자바스크립트 실행 전 HTML: 경보 이름 5개·safekorea.go.kr 출처 링크, <title>·canonical·공유 미리보기·푸터", async ({ request }) => {
   const res = await request.get(PATH);
   expect(res.status(), `${PATH} 응답`).toBe(200);
   // RSC 데이터(<script>)에만 있는 글자는 자바스크립트가 돌아야 보이므로 뺀다. 경보 이름은 head(메타데이터) 말고 body 에서 찾는다
@@ -132,6 +137,17 @@ test("자바스크립트 실행 전 HTML: 경보 이름 5개·safekorea.go.kr �
   expect.soft(markup.match(/<title>([^<]*)<\/title>/)?.[1], "<title>").toContain(TITLE_TEXT);
   const canonical = markup.match(/<link\b[^>]*\brel="canonical"[^>]*>/)?.[0].match(/\bhref="([^"]*)"/)?.[1];
   expect.soft(canonical && new URL(canonical, SITE_URL).pathname, `canonical(${canonical})`).toBe(PATH);
+
+  // 공유 미리보기: 루트 값을 물려받아 홈 주소·제목·설명이 나오지 않게, 루트의 사이트 이름·이미지는 빠지지 않게
+  const ogUrl = metaOf(markup, "og:url");
+  expect.soft(ogUrl && new URL(ogUrl, SITE_URL).pathname, `og:url(${ogUrl})`).toBe(PATH);
+  for (const key of ["description", "og:site_name", "og:locale", "og:type"]) expect.soft(metaOf(markup, key), key).toBeTruthy();
+  for (const p of ["og", "twitter"]) {
+    expect.soft(metaOf(markup, `${p}:title`), `${p}:title`).toBe(H1);
+    expect.soft(metaOf(markup, `${p}:description`), `${p}:description`).toBe(metaOf(markup, "description"));
+  }
+  expect.soft(metaOf(markup, "og:image"), "og:image(루트 파일 기반 이미지)").toMatch(/\/opengraph-image(?![\w-])/);
+  expect.soft(body, "푸터(SiteFooter)").toMatch(/<footer\b/);
 });
 
 test("sitemap.xml 에 <SITE_URL>/emergency", async ({ request }) => {
