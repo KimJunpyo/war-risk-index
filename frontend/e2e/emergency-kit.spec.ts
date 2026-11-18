@@ -1,16 +1,14 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { CIVIL_ALERTS } from "../src/entities/guide/model/alerts";
 import { CHECKLIST_STORAGE_KEY, readChecked } from "../src/entities/guide/model/checklist";
 import { GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, STOCK_ITEMS } from "../src/entities/guide/model/kit";
 
 // 이슈 #75(1-5) /emergency 비상 가방 체크리스트·물·식량 계산기와 홈 체크리스트 카드의 /emergency#kit 링크 실측. 기준 화면 폭(360·768·1080·1440)
 // 목록·기간·저장 키·출처는 이슈 #73 모델(kit.ts)과 비교하고, 계산 결과는 인수 조건의 숫자를 그대로 쓴다.
-// 페이지 골격(h1·목차·경보 카드·API 요청)은 #74 emergency.spec.ts, llms.txt "## 비상 대비" 절은 tests/test_m13_llms.py,
+// 페이지 골격(h1·경보 타일·준비 카드·API 요청)은 emergency.spec.ts(#74·#108), llms.txt "## 비상 대비" 절은 tests/test_m13_llms.py,
 // 체크리스트·경보·가방 id 교차 확인은 src/entities/guide/model/guide-ids.test.ts. 명도 대비 상태는 #74 병합 뒤 contrast.spec.ts 에 더한다
 //
 // 화면 선택자 계약 (구현은 이 계약을 따른다. #74 emergency.spec.ts 계약 위에 더한다)
-// - 목차(접근 이름 "목차"인 navigation): 경보 링크 5개 뒤에 href="#kit"(글자 "비상 가방")·href="#calc"(글자 "물·식량 계산") 링크가
-//   이 순서로 하나씩. 누르면 주소에 #kit·#calc 가 붙고 그 영역이 화면 안
+// - (이슈 #108 명세 변경) 목차가 없어졌다. 첫 화면 준비 카드(a[href="#kit"]·a[href="#calc"])가 두 영역으로 오고 그 확인은 emergency.spec.ts
 // - 가방 영역: id="kit" 요소 하나 (이슈 #105 에서 체크박스 목록 → 아이콘 타일로 바뀜)
 //   - 목록 둘: 제목 heading 이 정확히 "들고 나가는 3일 가방(1인 1개)"(GO_BAG_ITEMS)·"집에 두는 7일 비축"(STOCK_ITEMS).
 //     목록 = 제목에서 타일(button[aria-pressed])을 품은 가장 가까운 조상이고, 상대 목록의 타일은 품지 않는다
@@ -65,11 +63,8 @@ const LATE_REQUEST_MS = 1_000; // 체크·계산 뒤 늦게 나가는 요청(디
 const MAX_TABS = 10; // 다음 체크박스까지 누를 Tab 최대 수(사이에 다른 포커스 대상이 있어도 되게)
 
 const PATH = "/emergency";
-const KIT = "#kit"; // 영역 선택자이자 목차 href
+const KIT = "#kit"; // 영역 선택자
 const CALC = "#calc";
-const TOC_NAME = "목차";
-const KIT_TOC = "비상 가방";
-const CALC_TOC = "물·식량 계산";
 const LISTS = [
   { title: "들고 나가는 3일 가방(1인 1개)", items: GO_BAG_ITEMS },
   { title: "집에 두는 7일 비축", items: STOCK_ITEMS },
@@ -214,22 +209,8 @@ async function expectResult(calc: Locator, c: Case, timeout?: number) {
 // 내용 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
 test.describe.configure({ timeout: TEST_TIMEOUT_MS });
 
-test("목차·가방 영역: 경보 뒤 비상 가방·물·식량 계산 링크, 두 목록(제목·타일 모델 순서·접근 이름·아이콘, 체크박스 없음), 저장 안내, 끝에 항목 출처만 새 탭·확인일", async ({ page }) => {
+test("가방 영역: 두 목록(제목·타일 모델 순서·접근 이름·아이콘, 체크박스 없음), 저장 안내, 끝에 항목 출처만 새 탭·확인일", async ({ page }) => {
   await open(page);
-  const toc = page.getByRole("navigation", { name: TOC_NAME, exact: true });
-  await expect(toc, "목차").toBeVisible();
-  const hrefs: string[] = [];
-  for (const link of await toc.getByRole("link").all()) hrefs.push((await link.getAttribute("href")) ?? "");
-  const order = [...CIVIL_ALERTS.map((a) => `#${a.id}`), KIT, CALC];
-  expect.soft(hrefs.filter((h) => order.includes(h)), "목차 순서: 경보 5개 → 비상 가방 → 물·식량 계산(하나씩)").toEqual(order);
-  await expect.soft(toc.locator(`a[href="${KIT}"]`), "목차 비상 가방 글자").toHaveText(KIT_TOC);
-  await expect.soft(toc.locator(`a[href="${CALC}"]`), "목차 물·식량 계산 글자").toHaveText(CALC_TOC);
-  for (const [name, target] of [[KIT_TOC, KIT], [CALC_TOC, CALC]]) {
-    await toc.getByRole("link", { name, exact: true }).click();
-    await expect.soft(page, `${name} 주소`).toHaveURL(new RegExp(`${target}$`));
-    await expect.soft(page.locator(target), `${name} 영역이 화면 안`).toBeInViewport();
-  }
-
   const kit = kitOf(page);
   await expect(kit, "가방 영역(id=kit) 하나").toHaveCount(1);
   await expect.soft(kit.locator('input[type="checkbox"], [role="checkbox"]'), "#kit 안 체크박스").toHaveCount(0);
