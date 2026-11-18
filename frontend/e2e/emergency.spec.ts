@@ -16,6 +16,9 @@ import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 //   목차 링크는 모두 이 페이지 안 앵커(대상 id 가 페이지에 있음)
 // - 경보 카드: id="<경보 id>"인 요소 5개가 문서에 CIVIL_ALERTS 순서로 있고, 카드 내용은 모두 그 요소 안에 있다
 //   - 제목: 접근 이름이 경보 이름(name)인 heading
+//     제목 아이콘(이슈 #100): 카드 안 h3 하나, 그 안에 svg 하나(aria-hidden="true"). svg 의 계산된 stroke 가 h3 의 color 와
+//     같다(stroke="currentColor"로 경보 토큰 색을 따름). 아이콘을 넣어도 h3 접근 이름은 경보 이름 그대로.
+//     소스 쪽(lucide ISC 고지·"use client" 없음)은 tests/test_m17_icons.py
 //   - when·signal 글자
 //   - 할 일: 카드 안 ol 하나. 바로 아래 li 가 actions 순서대로 글자(text) 그대로라 li 수 = actions 수.
 //     번호는 목록 표시로 그린다(li 가 display: list-item, list-style-type 이 none 아님. 글자에 번호를 넣지 않음)
@@ -205,6 +208,26 @@ test("머리말·목차·경보 카드: CIVIL_ALERTS 순서, 할 일 항목 수 
       await expect.soft(card, `${a.id} 출처 ${key} 이름`).toContainText(s.name, { useInnerText: true });
       await expect.soft(card, `${a.id} 출처 ${key} 확인일`).toContainText(s.checkedAt);
     }
+  }
+});
+
+test("경보 카드 제목 아이콘: h3 마다 svg 하나·aria-hidden, 선 색 = 제목 글자 색, 접근 이름은 경보 이름 그대로", async ({ page }) => {
+  await page.goto(PATH);
+  await page.locator("main").waitFor();
+  for (const a of CIVIL_ALERTS) {
+    // 이름이 아니라 수준(h3)으로 찾아야 접근 이름을 따로 볼 수 있다
+    const title = cardOf(page, a.id).getByRole("heading", { level: 3 });
+    await expect(title, `${a.id} 제목(h3)`).toHaveCount(1);
+    await expect.soft(title, `${a.id} 제목 접근 이름`).toHaveAccessibleName(a.name);
+    const icon = title.locator("svg");
+    await expect(icon, `${a.id} 제목 안 svg 수`).toHaveCount(1);
+    await expect.soft(icon, `${a.id} 아이콘 aria-hidden`).toHaveAttribute("aria-hidden", "true");
+    // stroke 가 currentColor 면 Firefox·WebKit 모두 계산값을 color 와 같은 글자로 돌려준다
+    const c = await title.evaluate((h) => ({
+      color: getComputedStyle(h).color,
+      stroke: getComputedStyle(h.querySelector("svg")!).stroke,
+    }));
+    expect.soft(c.stroke, `${a.id} 아이콘 선 색(제목 글자 ${c.color})`).toBe(c.color);
   }
 });
 
