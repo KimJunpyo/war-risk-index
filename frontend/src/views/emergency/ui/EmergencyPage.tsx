@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "@/entities/guide";
 import { KitCalculator, KitChecklist } from "@/widgets/emergency-kit";
+import { SiteFooter } from "@/widgets/site-footer";
 
 // 경보 이름 색(1-1 경보별 토큰). Tailwind 는 소스에 적힌 클래스만 만들므로 id 로 조립하지 않고 글자 그대로 둔다
 const ALERT_COLOR: Record<CivilAlert["id"], string> = {
@@ -17,8 +18,8 @@ const KIT = { id: "kit", name: "비상 가방" };
 const CALC = { id: "calc", name: "물·식량 계산" };
 const TOC = [...CIVIL_ALERTS, KIT, CALC];
 
-/** 비상 대비 안내: 머리말·목차·경보 카드·비상 가방·물·식량 계산. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은 두지 않는다
- *  (가방 체크 저장·계산기는 브라우저 안에서만 동작하는 클라이언트 위젯) */
+/** 비상 대비 안내: 머리말·목차·경보 카드·비상 가방·물·식량 계산·푸터. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은 두지 않는다
+ *  (가방 체크 저장·계산기는 브라우저 안에서만 동작하는 클라이언트 위젯, 푸터는 정적 출처 목록만 그림) */
 export function EmergencyPage() {
   return (
     <main className="mx-auto w-full max-w-page px-4 py-6 md:px-6 md:py-8 lg:px-8">
@@ -65,6 +66,8 @@ export function EmergencyPage() {
         <h2 id="calc-title" className={SECTION_TITLE}>{CALC.name}</h2>
         <KitCalculator />
       </section>
+
+      <SiteFooter />
     </main>
   );
 }
