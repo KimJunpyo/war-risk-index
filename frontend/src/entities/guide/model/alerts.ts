@@ -2,6 +2,8 @@
 // 문구는 국민안전24 안내의 요지를 바탕으로 자체 작성했다(공식 문장 인용 아님). 출처는 링크로만 표시.
 
 type AlertSourceKey = "mois-alarm" | "mois-actions" | "mois-emergency";
+// 핵심 행동 그림 이름. 그림은 경보 상세 화면의 대응표가 그린다(이 파일은 node --test 로 돌아야 해 React 아이콘을 import 하지 않는다)
+export type KeyActionIcon = "go-down" | "building" | "walk" | "radio" | "bag" | "gas-off" | "cover-face" | "wind" | "seal" | "get-down" | "stay" | "rescue";
 
 export interface CivilAlert {
   id: "alert" | "air-raid" | "cbr" | "nuclear" | "all-clear";
@@ -11,6 +13,7 @@ export interface CivilAlert {
   siren: boolean; // 국민안전24 '민방위 경보' 기준 공습·핵만 사이렌
   actions: { id: string; text: string }[]; // id 는 경보 id 를 접두사로(체크리스트·비상 가방 id 와 겹치지 않게)
   sources: AlertSourceKey[];
+  keyActions: { from: string; text: string; icon: KeyActionIcon }[]; // 상세 첫 화면 핵심 행동 3개(보이는 순서). from 은 같은 경보 actions 의 id, text 는 그 행동을 줄인 자체 문구(공백 포함 30자 이하)
 }
 
 // 신호 문구. 사이렌 패턴은 국민안전24 '민방위 경보'의 경보단말 기준, 문자는 자연재난 재난문자와 구분해 '민방공 경보문자'
@@ -35,6 +38,11 @@ export const CIVIL_ALERTS: CivilAlert[] = [
       { id: "alert-night", text: "밤에는 집 안팎 조명을 다 끄고 창마다 커튼·블라인드를 쳐 두기, 운전 중이면 차 불빛을 낮추고 서행하기" },
     ],
     sources: ["mois-alarm", "mois-actions", "mois-emergency"],
+    keyActions: [
+      { from: "alert-listen", text: "라디오·TV를 켜고 정부 안내 따르기", icon: "radio" },
+      { from: "alert-ready", text: "바로 떠날 수 있게 대피 준비하기", icon: "bag" },
+      { from: "alert-fire", text: "바깥 가스 밸브 잠그고 전열기 플러그 뽑기", icon: "gas-off" },
+    ],
   },
   {
     id: "air-raid",
@@ -53,6 +61,11 @@ export const CIVIL_ALERTS: CivilAlert[] = [
       { id: "air-raid-night", text: "밤에는 실내외 불을 모두 끈 뒤 대피하고, 차를 세웠으면 전조등·미등·실내등까지 끄기" },
     ],
     sources: ["mois-alarm", "mois-actions", "mois-emergency"],
+    keyActions: [
+      { from: "air-raid-shelter", text: "가장 가까운 지하로 바로 대피하기", icon: "go-down" },
+      { from: "air-raid-indoor", text: "지하로 못 가면 콘크리트 건물 안 유리창 없는 곳으로", icon: "building" },
+      { from: "air-raid-stairs", text: "엘리베이터 말고 계단으로 내려가기", icon: "walk" },
+    ],
   },
   {
     id: "cbr",
@@ -71,6 +84,11 @@ export const CIVIL_ALERTS: CivilAlert[] = [
       { id: "cbr-listen", text: "해제 방송이 나올 때까지 보호장비를 계속 쓰고 안내를 듣기" },
     ],
     sources: ["mois-alarm", "mois-actions", "mois-emergency"],
+    keyActions: [
+      { from: "cbr-breath", text: "방독면, 없으면 마스크·젖은 수건으로 코와 입 가리기", icon: "cover-face" },
+      { from: "cbr-escape", text: "밖에서는 바람이 흘러가는 쪽을 피해 옆이나 높은 곳으로", icon: "wind" },
+      { from: "cbr-seal", text: "실내에서는 문·창 닫고 틈 막기", icon: "seal" },
+    ],
   },
   {
     id: "nuclear",
@@ -89,6 +107,11 @@ export const CIVIL_ALERTS: CivilAlert[] = [
       { id: "nuclear-stay", text: "지하 깊은 곳이나 건물 안쪽에 머물며 정부 안내방송을 듣고, 2주 이상 버틸 물·식량을 챙기기" },
     ],
     sources: ["mois-alarm", "mois-actions", "mois-emergency"],
+    keyActions: [
+      { from: "nuclear-underground", text: "바깥과 차단된 지하로 서둘러 대피하기", icon: "go-down" },
+      { from: "nuclear-flash", text: "섬광이 보이면 바로 엎드려 눈·귀 막기", icon: "get-down" },
+      { from: "nuclear-stay", text: "대피한 곳에 머물며 정부 방송 듣기", icon: "stay" },
+    ],
   },
   {
     id: "all-clear",
@@ -102,6 +125,11 @@ export const CIVIL_ALERTS: CivilAlert[] = [
       { id: "all-clear-listen", text: "정부 안내방송을 계속 듣고, SNS로 도는 확인되지 않은 소문은 믿지 않기" },
     ],
     sources: ["mois-alarm", "mois-emergency"],
+    keyActions: [
+      { from: "all-clear-rescue", text: "다친 사람이 있으면 구조 돕기", icon: "rescue" },
+      { from: "all-clear-ready", text: "다시 대피할 준비는 그대로 두기", icon: "bag" },
+      { from: "all-clear-listen", text: "정부 방송을 듣고 소문은 믿지 않기", icon: "radio" },
+    ],
   },
 ];
 
