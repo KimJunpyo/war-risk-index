@@ -79,6 +79,20 @@ export const MEALS_PER_PERSON_DAY = 3;
 export const MAX_PEOPLE = 20; // 화면 가구원 수 입력 상한
 
 export const KIT_STORAGE_KEY = "war-risk:kit:v1"; // 두 목록의 체크 상태를 같이 둔다(CHECKLIST_STORAGE_KEY 와 따로)
+export const KIT_CALC_STORAGE_KEY = "war-risk:kit-calc:v1"; // 계산기 입력(가구원 수·기간). 첫 화면 물 카드도 같은 값을 쓴다(plan.md Q7)
+// 저장값이 없을 때: 기획 예시(4인 가구·7일 비축 → 물 84L). 기간은 목록 순서가 아니라 id 로 고른다(Q2 의 비축 기본)
+const KIT_CALC_DEFAULT = { people: 4, period: "stock7" };
+
+/** 계산기 입력 저장값(localStorage 원문) → 가구원 수·기간. people 이 1~MAX_PEOPLE 정수이고 period 가 KIT_PERIODS 의 id 일 때만
+ *  그 두 칸, 없거나 JSON·객체가 아니거나 한 칸이라도 틀리면 통째로 기본값(4명·7일 비축) */
+export function readKitCalc(raw: string | null): { people: number; period: string } {
+  try {
+    const { people, period } = JSON.parse(raw ?? "null") ?? {};
+    // 가구원·기간 검사는 supplies 와 같다(기간 id 가 없으면 days 가 NaN 이라 null)
+    if (supplies(people, KIT_PERIODS.find((p) => p.id === period)?.days ?? NaN)) return { people, period };
+  } catch { /* JSON 이 아니면 기본값 */ }
+  return { ...KIT_CALC_DEFAULT };
+}
 
 /** 가구원 수·기간(일) → 물(L)·식량(끼니). 가구원이 1~MAX_PEOPLE 정수가 아니거나 기간이 KIT_PERIODS 에 없으면 null */
 export function supplies(people: number, days: number): { waterL: number; meals: number } | null {
