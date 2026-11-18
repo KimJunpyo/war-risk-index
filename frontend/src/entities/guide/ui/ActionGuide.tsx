@@ -1,8 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CHECKLIST_SOURCE, CHECKLIST_STORAGE_KEY, readChecked, toggleChecked } from "../model/checklist";
 import { bandFor } from "../model/guide";
+
+// 구간마다 하나 있는 비상용품 항목(준비 구간은 "3일치 비상용품"). 그 아래에 /emergency 비상 가방 링크를 달아 어느 구간이든 카드에 하나
+const KIT_ITEM_IDS = ["go-bag-ready", "supplies-3days", "kit-check", "kit-list"];
+const KIT_HREF = "/emergency#kit";
 
 /** 선택한 나라·쌍의 점수 구간에 맞는 행동 권고 체크리스트 카드 (체크 상태는 브라우저에만 저장)
  *  beside: lg 이상에서 다른 카드 옆에 반 폭으로 놓이면 true → 항목 1열 (화면 폭만으로는 옆 카드 유무를 알 수 없음) */
@@ -53,6 +58,12 @@ export function ActionGuide({ score, status, onMore, beside = false }: {
               />
               <span className={checked.includes(it.id) ? "text-neutral-400 line-through" : ""}>{it.text}</span>
             </label>
+            {/* ml-5: 체크박스 폭+간격만큼 들여 항목 글자 아래에 맞춤. py-1: 터치 대상 높이 24px(WCAG 2.5.8) */}
+            {KIT_ITEM_IDS.includes(it.id) && (
+              <Link href={KIT_HREF} className="ml-5 inline-block py-1 text-fg-muted underline decoration-link-line hover:text-fg">
+                비상 가방 목록·물·식량 계산 <span aria-hidden="true">→</span>
+              </Link>
+            )}
           </li>
         ))}
       </ul>
