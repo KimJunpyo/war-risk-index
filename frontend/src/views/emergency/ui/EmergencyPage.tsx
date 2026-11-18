@@ -3,15 +3,8 @@ import { ALERT_ICON, ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "@/enti
 import { Icon } from "@/shared/ui";
 import { KitCalculator, KitChecklist } from "@/widgets/emergency-kit";
 import { SiteFooter } from "@/widgets/site-footer";
+import { ALERT_COLOR } from "./alert-color";
 
-// 경보 이름 색(1-1 경보별 토큰). Tailwind 는 소스에 적힌 클래스만 만들므로 id 로 조립하지 않고 글자 그대로 둔다
-const ALERT_COLOR: Record<CivilAlert["id"], string> = {
-  alert: "text-alert-alert",
-  "air-raid": "text-alert-air-raid",
-  cbr: "text-alert-cbr",
-  nuclear: "text-alert-nuclear",
-  "all-clear": "text-alert-all-clear",
-};
 const LABEL = "text-xs text-fg-muted";
 const SECTION_TITLE = "mb-3 text-sm font-semibold tracking-wide text-fg-soft";
 // 경보 뒤 영역(1-5). 목차 칩 글자와 영역 제목에 같은 이름을 쓴다
