@@ -5,6 +5,7 @@ import { KIT_PERIODS, KIT_SOURCES, MAX_PEOPLE, MEALS_PER_PERSON_DAY, supplies, W
 import { Icon, SegmentedControl } from "@/shared/ui";
 import { useKitCalc } from "../model/use-kit-calc";
 import { CALC_ICON } from "./calc-icons";
+import { KitShoppingList } from "./KitShoppingList";
 import { SourceLinks } from "./SourceLinks";
 
 const MIN_PEOPLE = 1; // supplies() 의 가구원 하한과 같음
@@ -19,7 +20,8 @@ const STEP_BUTTON =
 const NO_SUBSCRIBE = () => () => {}; // 하이드레이션 여부는 바뀐 뒤 다시 바뀌지 않아 구독할 것이 없음
 
 /** 물·식량 계산기: 가구원 수(−/+·숫자 칸)·기간(칩) → 물 L(무게 kg)·식량 끼니와 1인당 값. 브라우저 안에서만 계산한다(요청 없음).
- *  바른 입력은 이 브라우저에 저장한다(useKitCalc). md 미만은 입력 아래에 결과, md 이상은 입력 오른쪽에 결과 */
+ *  바른 입력은 이 브라우저에 저장한다(useKitCalc). md 미만은 입력 아래에 결과, md 이상은 입력 오른쪽에 결과.
+ *  결과 아래에 장보기 목록(KitShoppingList, plan.md 7-7) */
 export function KitCalculator() {
   const id = useId();
   const errorId = `${id}-error`;
@@ -92,21 +94,24 @@ export function KitCalculator() {
             />
           </div>
         </div>
-        {/* live 영역은 값이 잘못돼도 DOM 에 둔다(결과와 함께 새로 붙으면 읽지 않는 스크린리더가 많음).
-            숫자만 바뀌어도 문장 전체를 읽게 atomic */}
-        <div aria-live="polite" aria-atomic="true" className="min-w-0 md:flex-1">
-          {total && each ? (
-            <>
-              {/* 무게는 물 1L ≈ 1kg 로만 보인다(Q3) */}
-              <p className="text-lg font-semibold text-fg-strong">물 {total.waterL}L(약 {total.waterL}kg) · 식량 {total.meals}끼</p>
-              <p className="mt-1 text-sm text-fg-soft">1인당 물 {each.waterL}L · {each.meals}끼</p>
-              {calc.period === BAG_PERIOD_ID && (
-                <p className="mt-2 text-sm text-fg-soft">가방은 한 사람에 하나입니다. 가방 하나에 넣을 물만 약 {each.waterL}kg입니다.</p>
-              )}
-            </>
-          ) : (
-            <p id={errorId} className="text-sm text-warning">{MIN_PEOPLE}~{MAX_PEOPLE} 사이 정수로 입력해 주세요</p>
-          )}
+        <div className="min-w-0 md:flex-1">
+          {/* live 영역은 값이 잘못돼도 DOM 에 둔다(결과와 함께 새로 붙으면 읽지 않는 스크린리더가 많음).
+              숫자만 바뀌어도 문장 전체를 읽게 atomic. 장보기 목록은 입력마다 통째로 읽지 않게 이 영역 밖에 둔다 */}
+          <div aria-live="polite" aria-atomic="true">
+            {total && each ? (
+              <>
+                {/* 무게는 물 1L ≈ 1kg 로만 보인다(Q3) */}
+                <p className="text-lg font-semibold text-fg-strong">물 {total.waterL}L(약 {total.waterL}kg) · 식량 {total.meals}끼</p>
+                <p className="mt-1 text-sm text-fg-soft">1인당 물 {each.waterL}L · {each.meals}끼</p>
+                {calc.period === BAG_PERIOD_ID && (
+                  <p className="mt-2 text-sm text-fg-soft">가방은 한 사람에 하나입니다. 가방 하나에 넣을 물만 약 {each.waterL}kg입니다.</p>
+                )}
+              </>
+            ) : (
+              <p id={errorId} className="text-sm text-warning">{MIN_PEOPLE}~{MAX_PEOPLE} 사이 정수로 입력해 주세요</p>
+            )}
+          </div>
+          <KitShoppingList people={Number(people)} period={calc.period} />
         </div>
       </div>
       <p className={`mt-4 leading-relaxed ${LABEL}`}>
