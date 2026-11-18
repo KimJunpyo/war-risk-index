@@ -429,7 +429,7 @@ const INC = "가구원 수 늘리기";
 const TARGET_MIN_PX = 44; // −/+ 버튼 가로·세로 최소(plan.md 7-8)
 const CHIP_MIN_PX = 40; // 기간 칩 높이 최소
 const LATE_SAVE_MS = 1_000; // 잘못된 값이 늦게(디바운스) 저장되지 않는지 볼 때 기다리는 시간
-const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
+const CALC_TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
 const WEEK_PER_PERSON = 21; // 1인 7일 물 21L·21끼
 /** n명·7일 비축 결과 글자 */
 const week = (n: number): Case => ({
@@ -479,7 +479,7 @@ const focusRingShown = (page: Page) => page.evaluate((transparent) => {
   const s = getComputedStyle(el);
   const outline = s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && !new RegExp(transparent).test(s.outlineColor);
   return outline || s.boxShadow !== "none";
-}, TRANSPARENT.source);
+}, CALC_TRANSPARENT.source);
 
 test("−/+ 버튼: #calc 안 가구원 수 줄이기·늘리기 하나씩, 그 사이에 spinbutton 가구원 수, 아이콘 svg 는 aria-hidden, live 영역 밖", async ({ page }) => {
   await open(page);
