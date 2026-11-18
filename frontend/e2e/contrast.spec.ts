@@ -7,6 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 // 재지 않는 것(plan.md 7절 한계): background-image(그라데이션)·조상 opacity·가상 요소 글자·input 값과 placeholder·option,
 // aria-hidden·비활성 컨트롤 안쪽. 지도 hover 툴팁은 SVG hover 가 불안정해 앱 브라우저에서 수동 확인(이슈 할 일 5).
 // 상태는 홈 기준이고, path 가 있는 상태는 그 경로를 잰다(이슈 #74 /emergency, 정적 페이지라 데이터를 기다리지 않음).
+// /emergency 동작 상태(이슈 #75 가방 체크·계산 결과·잘못된 입력 안내)는 하이드레이션 뒤에 동작하고, 동작 뒤에도 홈 데이터를 기다리지 않는다.
 // 소스 쪽 계약은 tests/test_m8_contrast.py
 const WIDTHS = [360, 768, 1080, 1440];
 const HEIGHT = 900;
@@ -17,6 +18,7 @@ const OTHER_TAB = 1; // 고를 국가 쌍 탭(순서). 첫 화면 기본 대상(
 const HOME_COUNTRY = "대한민국"; // 첫 화면 기본 대상. 재외공관은 이 나라가 아닐 때만 나옴
 const GUIDE_NAME = "가이드 · 여행경보 단계";
 const CHART_NAME = "전쟁 가능성 지수 추이";
+const KIT_PEOPLE = "4"; // 비상 대비 계산 결과 상태의 가구원 수. 합계 무게(약 36kg)와 가방 1인분 무게(약 9kg)가 달라 둘 다 보인다
 // 체크리스트 항목 글자: 체크한 것·체크 안 한 것
 const CHECKED_ITEM = 'label:has(input[type="checkbox"]:checked) > span';
 const UNCHECKED_ITEM = 'label:has(input[type="checkbox"]:not(:checked)) > span';
@@ -154,6 +156,25 @@ const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnima
 const HOME: State = { name: "기본 홈" };
 const CHECK_ONE: State = { name: "체크리스트 항목 하나 체크", act: (page) => page.getByRole("checkbox").first().check() };
 
+/** /emergency 동작 전: 하이드레이션 끝을 알리는 요소가 없어 네트워크가 잠잠해질 때까지 기다린다(그 전 입력은 React 가 받지 못함) */
+const hydrated = (page: Page) => page.waitForLoadState("networkidle");
+const calcOf = (page: Page) => page.locator("#calc");
+const peopleOf = (page: Page) => calcOf(page).getByRole("spinbutton", { name: "가구원 수", exact: true });
+const KIT_CHECK: State = {
+  name: "비상 대비 가방 체크",
+  path: "/emergency",
+  act: async (page) => {
+    await hydrated(page);
+    // 두 목록의 첫 항목. 목록 = 제목에서 체크박스를 품은 가장 가까운 조상(emergency-kit.spec.ts 계약)
+    for (const title of ["들고 나가는 3일 가방(1인 1개)", "집에 두는 7일 비축"]) {
+      await page.locator("#kit").getByRole("heading", { name: title, exact: true })
+        .locator("xpath=ancestor::*[.//input[@type='checkbox']][1]").getByRole("checkbox").first().check();
+    }
+  },
+};
+// 체크한 항목·체크 안 한 항목 글자를 따로 재 위계를 보는 상태
+const CHECK_STATES = [CHECK_ONE, KIT_CHECK];
+
 const STATES: State[] = [
   HOME,
   {
@@ -204,6 +225,32 @@ const STATES: State[] = [
     },
   },
   { name: "비상 대비 페이지 기본", path: "/emergency" },
+  KIT_CHECK,
+  {
+    name: "비상 대비 계산 결과(3일 가방)",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      const calc = calcOf(page);
+      await calc.getByRole("radiogroup", { name: "기간", exact: true }).getByRole("radio", { name: "3일 가방", exact: true }).click();
+      await peopleOf(page).fill(KIT_PEOPLE);
+      // 결과·가방 안내·1인당 물 무게가 다 보인 뒤 잰다
+      for (const text of ["물 36L(약 36kg) · 식량 36끼", "가방은 한 사람에 하나", "약 9kg"]) {
+        await expect(calc.getByText(text).first(), text).toBeVisible();
+      }
+    },
+  },
+  {
+    name: "비상 대비 계산 잘못된 입력 안내",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      // 바른 값을 넣었다 지워 빈칸 안내를 띄운다(처음부터 빈칸이어도 입력 사건이 일어나게)
+      await peopleOf(page).fill(KIT_PEOPLE);
+      await peopleOf(page).fill("");
+      await expect(calcOf(page).getByText("1~20 사이 정수로 입력해 주세요").first(), "빈칸 안내").toBeVisible();
+    },
+  },
 ];
 
 // 측정 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
@@ -246,13 +293,13 @@ for (const width of WIDTHS) {
         if (!state.path) await waitData(page); // 데이터(LIVE 배지·패널)는 홈에만 있다
         if (state.act) {
           await state.act(page);
-          await waitData(page);
+          if (!state.path) await waitData(page);
         }
         // 방금 누른 요소의 hover 색이 아니라 평소 색을 잰다. 포인터를 치운 뒤의 전환(Firefox)까지 settle 이 기다리도록 먼저 옮긴다
         await page.mouse.move(0, 0);
         await settle(page);
 
-        const r = await audit(page, state.root ?? "body", state === CHECK_ONE ? [CHECKED_ITEM, UNCHECKED_ITEM] : []);
+        const r = await audit(page, state.root ?? "body", CHECK_STATES.includes(state) ? [CHECKED_ITEM, UNCHECKED_ITEM] : []);
         const failures = r.items.filter((m) => m.ratio < m.min).map(line);
         const underlineFailures = r.underlines.filter((m) => m.underlineRatio < UNDERLINE_MIN).map(underlineLine);
         const louder = r.underlines.filter((m) => m.underlineRatio > m.ratio)
@@ -269,7 +316,7 @@ for (const width of WIDTHS) {
         // 위계: 밑줄은 같은 요소의 글자보다 옅다
         expect.soft(louder, "밑줄 대비가 같은 요소의 글자 대비보다 높음").toEqual([]);
 
-        if (state === CHECK_ONE) {
+        if (CHECK_STATES.includes(state)) {
           // 위계: 체크한 항목(취소선)이 체크 안 한 항목보다 흐리다
           const [checked, unchecked] = r.picked;
           expect(checked && unchecked, "체크한 항목·체크 안 한 항목 글자").toBeTruthy();
