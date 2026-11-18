@@ -6,6 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 // 같은 요소의 글자 대비 이하(밑줄이 글자보다 튀지 않게). 포인터를 치운 기본 상태만 잰다(hover·focus 색은 재지 않음).
 // 재지 않는 것(plan.md 7절 한계): background-image(그라데이션)·조상 opacity·가상 요소 글자·input 값과 placeholder·option,
 // aria-hidden·비활성 컨트롤 안쪽. 지도 hover 툴팁은 SVG hover 가 불안정해 앱 브라우저에서 수동 확인(이슈 할 일 5).
+// 상태는 홈 기준이고, path 가 있는 상태는 그 경로를 잰다(이슈 #74 /emergency, 정적 페이지라 데이터를 기다리지 않음).
 // 소스 쪽 계약은 tests/test_m8_contrast.py
 const WIDTHS = [360, 768, 1080, 1440];
 const HEIGHT = 900;
@@ -31,7 +32,7 @@ const PROBE_ID = "contrast-probe";
 const UNDERLINE_MIN = 3; // 밑줄 대비 기준(WCAG 1.4.11 비텍스트)
 
 type Measured = { text: string; fg: string; bg: string; ratio: number; min: number; underline: string; underlineRatio: number };
-type State = { name: string; root?: string; act?: (page: Page) => Promise<void> };
+type State = { name: string; path?: string; root?: string; act?: (page: Page) => Promise<void> };
 
 /** 브라우저 안에서 실행하는 측정 코드(Chromium 앱 브라우저에서 먼저 검증). Playwright 는 함수 본문만 보내므로 도우미를 모두 안에 둔다.
  *  items: root 아래 보이는 글자 요소 전부, underlines: 보이는 밑줄 요소 전부, picked: 선택자마다 첫 요소, ratios: 색 쌍의 대비(자체 확인용) */
@@ -202,6 +203,7 @@ const STATES: State[] = [
         .toBeVisible({ timeout: DATA_TIMEOUT_MS });
     },
   },
+  { name: "비상 대비 페이지 기본", path: "/emergency" },
 ];
 
 // 측정 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
@@ -239,9 +241,9 @@ for (const width of WIDTHS) {
         // 동작 줄이기: fade-up·pulse 등 애니메이션이 끝난 상태에서 잰다
         await page.emulateMedia({ reducedMotion: "reduce" });
         await page.setViewportSize({ width, height: HEIGHT });
-        await page.goto("/");
+        await page.goto(state.path ?? "/");
         await page.locator("main").waitFor();
-        await waitData(page);
+        if (!state.path) await waitData(page); // 데이터(LIVE 배지·패널)는 홈에만 있다
         if (state.act) {
           await state.act(page);
           await waitData(page);

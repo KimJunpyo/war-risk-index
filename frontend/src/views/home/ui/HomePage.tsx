@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { MOFA_PARTIAL, Opponents, StatusBadge, useCountries, type Advisory, type Country } from "@/entities/country";
 import { ActionGuide, FAQ } from "@/entities/guide";
@@ -63,11 +64,22 @@ export function HomePage() {
         <div className="flex items-center gap-2 md:gap-3">
           <h1 className="shrink-0 text-xl font-bold tracking-tight text-white md:text-2xl">전쟁 가능성 지수</h1>
           <LiveBadge />
+          {/* 좁은 폭(md 미만)에서는 아이콘만 보이고 글자는 스크린리더에 남겨, 접근 가능한 이름은 모든 폭에서 "비상 대비" */}
+          <Link
+            href="/emergency"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-line-strong p-1 text-xs text-fg-soft transition hover:bg-surface-hover md:px-3"
+          >
+            {/* 경광등 아이콘 */}
+            <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4.5 12.5v-3a3.5 3.5 0 0 1 7 0v3M2.5 12.5h11M8 2v1.5M3.4 4.4l1 1M12.6 4.4l-1 1" />
+            </svg>
+            <span className="max-md:sr-only">비상 대비</span>
+          </Link>
           {/* 좁은 폭에서는 "가이드"만 보이고, 접근 가능한 이름은 모든 폭에서 같음 */}
           <button
             onClick={() => setGuideOpen(true)}
             aria-label="가이드 · 여행경보 단계"
-            className="ml-auto shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs text-neutral-300 transition hover:bg-white/10"
+            className="shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs text-neutral-300 transition hover:bg-white/10"
           >
             가이드<span className="hidden md:inline"> · 여행경보 단계</span>
           </button>
