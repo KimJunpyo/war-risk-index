@@ -26,6 +26,8 @@ export type ShoppingList =
 
 const BOTTLE_L = 2; // 물 1L ≈ 1kg 라 병 무게도 약 2kg
 const PACK_BOTTLES = 6; // 농림수산성도 2인 1주 42L 를 2L 6병 4상자(48L)로 올렸다
+/** 물 묶음 단위 이름. 복사 글자와 화면(장보기 목록·첫 화면 물 카드)이 같은 글자를 쓴다 */
+export const WATER_PACK = `${BOTTLE_L}L 생수 ${PACK_BOTTLES}병 묶음`;
 const STOVES = 1; // 휴대용 가스레인지는 가구당 1대
 const BUTANE_ID = "butane"; // 복사 글자에서 휴대용 가스레인지와 한 줄에 적는 품목
 const BAG_WATER_L_PER_PERSON = 2; // 국민안전24 비상대비 그림 29 "성인 기준 하루 약 2L" × 가방에 1일분(농림수산성 가이드 (6)), Q6 결정 A
@@ -85,7 +87,7 @@ export function shoppingText(people: number, periodId: string): string | null {
   const list = shoppingList(people, periodId);
   if (!list) return null;
   const title = `${people}명 · ${KIT_PERIODS.find((p) => p.id === periodId)?.label}`;
-  const water = (w: WaterPacks) => `${BOTTLE_L}L 생수 ${PACK_BOTTLES}병 묶음 ${w.packs}팩(${w.bottles}병, 약 ${w.kg}kg)`;
+  const water = (w: WaterPacks) => `${WATER_PACK} ${w.packs}팩(${w.bottles}병, 약 ${w.kg}kg)`;
   const item = (it: ShoppingItem) => `${it.name} ${it.qty}${it.unit}`;
   if (list.kind === "bag") {
     const { bag, home } = list;

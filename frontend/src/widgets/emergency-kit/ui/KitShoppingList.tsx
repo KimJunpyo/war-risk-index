@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { KIT_PERIODS, KIT_SOURCES, shoppingList, shoppingText } from "@/entities/guide";
+import { KIT_PERIODS, KIT_SOURCES, shoppingList, shoppingText, WATER_PACK } from "@/entities/guide";
 import { Icon } from "@/shared/ui";
 import { SHOPPING_ICON } from "./shopping-icons";
 import { SourceLinks } from "./SourceLinks";
 
-const WATER_PACK = "2L 생수 6병 묶음"; // shopping.ts waterPacks 의 묶음 단위
 const COPIED = "복사했습니다";
 const COPY_FAILED = "복사하지 못했습니다. 목록을 길게 눌러 직접 복사해 주세요.";
 // 안내를 비운 뒤 다시 채우기까지. writeText 가 바로 끝나면 비움·채움이 한 프레임에 합쳐져 스크린리더가 바뀐 줄 모르므로 틈을 둔다.

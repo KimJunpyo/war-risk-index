@@ -1,6 +1,6 @@
 "use client";
 
-import { GO_BAG_ITEMS, KIT_PERIODS, shoppingList, STOCK_ITEMS, supplies } from "@/entities/guide";
+import { GO_BAG_ITEMS, KIT_PERIODS, shoppingList, STOCK_ITEMS, supplies, WATER_PACK } from "@/entities/guide";
 import { useKitChecked } from "../model/kit-checked";
 import { useKitCalc } from "../model/use-kit-calc";
 
@@ -11,7 +11,6 @@ const BAG_ROWS = [
   { name: "3일 가방", items: GO_BAG_ITEMS },
   { name: "7일 비축", items: STOCK_ITEMS },
 ];
-const WATER_PACK = "2L 생수 6병 묶음"; // shopping.ts waterPacks 의 묶음 단위
 // 카드 전체가 링크다. 포커스 표시는 가방 타일과 같다
 const CARD =
   "block rounded-2xl border border-line bg-surface p-5 transition hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-soft";
