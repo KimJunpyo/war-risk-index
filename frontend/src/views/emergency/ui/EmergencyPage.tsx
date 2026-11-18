@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "@/entities/guide";
+import { ALERT_ICON, ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "@/entities/guide";
+import { Icon } from "@/shared/ui";
 import { KitCalculator, KitChecklist } from "@/widgets/emergency-kit";
 import { SiteFooter } from "@/widgets/site-footer";
 
@@ -72,11 +73,14 @@ export function EmergencyPage() {
   );
 }
 
-/** 경보 카드: 이름(경보별 색)·언제·어떻게 알리나·할 일(번호 목록)·출처(새 탭)와 확인일 */
+/** 경보 카드: 아이콘·이름(경보별 색, 아이콘도 같은 색)·언제·어떻게 알리나·할 일(번호 목록)·출처(새 탭)와 확인일 */
 function AlertCard({ alert: a }: { alert: CivilAlert }) {
   return (
     <article id={a.id} className="rounded-2xl border border-line bg-surface p-5">
-      <h3 className={`text-lg font-semibold ${ALERT_COLOR[a.id]}`}>{a.name}</h3>
+      <h3 className={`flex items-center gap-2 text-lg font-semibold ${ALERT_COLOR[a.id]}`}>
+        <Icon className="h-5 w-5 shrink-0">{ALERT_ICON[a.id]()}</Icon>
+        {a.name}
+      </h3>
       <dl className="mt-3 space-y-3 text-sm">
         <div>
           <dt className={LABEL}>언제</dt>
