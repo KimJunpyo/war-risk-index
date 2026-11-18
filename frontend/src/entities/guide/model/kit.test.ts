@@ -10,6 +10,10 @@
 //   export function supplies(people: number, days: number): { waterL: number; meals: number } | null
 //     people 이 1~MAX_PEOPLE 정수가 아니거나 days 가 KIT_PERIODS 에 없으면 null
 //   export const KIT_STORAGE_KEY = "war-risk:kit:v1"  // 체크 상태용(1-5), CHECKLIST_STORAGE_KEY 와 따로 둔다
+//   export const KIT_CALC_STORAGE_KEY = "war-risk:kit-calc:v1"  // #106(1-7) 계산기 입력(가구원 수·기간, plan.md Q7)
+//   export function readKitCalc(raw: string | null): { people: number; period: string }  // #106. localStorage 원문 → 계산기 입력
+//     people 이 1~MAX_PEOPLE 정수이고 period 가 KIT_PERIODS 의 id 일 때만 그 두 칸, 아니면(없음·JSON 아님·객체 아님·
+//     한 칸이라도 틀림) 통째로 기본값 { people: 4, period: "stock7" }. 저장 형식(두 키의 JSON)은 e2e emergency-kit.spec.ts 가 본다
 //   export const KIT_SOURCES: Record<KitSourceKey, { name: string; url: string; checkedAt: string }>  // checkedAt "YYYY-MM-DD"
 //     키 후보는 mois-emergency·maff·mcf·bbk. 원문을 확인하지 못한 출처는 빠질 수 있어 키 목록은 확인하지 않는다.
 // 목록 문구는 자체 작성이라 특정 문장은 확인하지 않는다. 경보(alerts.ts, #72) id 와의 교차 확인은 둘 다 들어온 뒤 따로 한다.
@@ -19,8 +23,8 @@ import { test } from "node:test";
 
 import { CHECKLIST, CHECKLIST_STORAGE_KEY } from "./checklist.ts";
 import {
-  GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, MEALS_PER_PERSON_DAY, STOCK_ITEMS, supplies,
-  WATER_L_PER_PERSON_DAY,
+  GO_BAG_ITEMS, KIT_CALC_STORAGE_KEY, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, MEALS_PER_PERSON_DAY, readKitCalc,
+  STOCK_ITEMS, supplies, WATER_L_PER_PERSON_DAY,
 } from "./kit.ts";
 
 const ALL_ITEMS = [...GO_BAG_ITEMS, ...STOCK_ITEMS];
@@ -96,6 +100,30 @@ test("출처마다 이름·https 링크·확인일(YYYY-MM-DD)", () => {
 test("저장 키: war-risk:kit:v1, 체크리스트 저장 키와 따로", () => {
   assert.equal(KIT_STORAGE_KEY, "war-risk:kit:v1");
   assert.notEqual(KIT_STORAGE_KEY, CHECKLIST_STORAGE_KEY);
+});
+
+test("계산기 입력 저장 키: war-risk:kit-calc:v1 (#106)", () => {
+  assert.equal(KIT_CALC_STORAGE_KEY, "war-risk:kit-calc:v1");
+});
+
+test("readKitCalc: 바른 저장값은 가구원 수·기간 두 칸 그대로 (가구원 1·20 경계, 기간 id 셋)", () => {
+  assert.deepEqual(readKitCalc('{"people":6,"period":"stock14"}'), { people: 6, period: "stock14" });
+  for (const { id } of KIT_PERIODS) {
+    for (const people of [1, MAX_PEOPLE]) {
+      assert.deepEqual(readKitCalc(JSON.stringify({ people, period: id })), { people, period: id }, `${people}명·${id}`);
+    }
+  }
+});
+
+test("readKitCalc: 없거나 JSON·객체가 아니거나 한 칸이라도 틀리면 통째로 기본값 4명·7일 비축 (Q7)", () => {
+  const fallback = { people: 4, period: "stock7" };
+  const broken = [null, "", "{people:6", "null", "[]", "6"];
+  const outOfRange = [
+    '{"people":0,"period":"stock14"}', '{"people":21,"period":"stock14"}', '{"people":1.5,"period":"stock14"}',
+    '{"people":"6","period":"stock14"}', '{"period":"stock14"}', // 가구원 수는 1~20 정수(글자 "6" 아님)
+    '{"people":6,"period":"x"}', '{"people":6,"period":14}', '{"people":6,"period":"14일 비축"}', '{"people":6}', // 기간은 id
+  ];
+  for (const raw of [...broken, ...outOfRange]) assert.deepEqual(readKitCalc(raw), fallback, `raw=${raw}`);
 });
 
 test("kit.ts 에 별칭(@/) import 가 없다 (node --test 는 @/ 를 풀지 못한다)", () => {

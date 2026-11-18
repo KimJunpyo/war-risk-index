@@ -23,17 +23,27 @@ import { GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, ST
 //   - 출처: 마지막 체크박스 뒤에 KIT_SOURCES 마다 a[href=url](target="_blank", rel 에 noreferrer), 이름(name)·확인일(checkedAt 그대로)
 //   - 배치: md(768) 미만은 두 목록 위아래(3일 가방 위), md 이상은 2열(3일 가방 왼쪽)
 // - 계산기 영역: id="calc" 요소 하나
-//   - 가구원 수: 접근 이름이 정확히 "가구원 수"인 input[type=number](spinbutton), min="1"·max="20"(MAX_PEOPLE)
-//   - 기간: 공용 SegmentedControl. 접근 이름 "기간"인 radiogroup, radio 글자 = KIT_PERIODS label(순서 그대로)
+//   - 가구원 수(#106): [줄이기] [숫자 칸] [늘리기]가 이 순서로 한 줄. 숫자 칸은 남긴다(plan.md Q8, 직접 입력도 된다)
+//     - 숫자 칸: 접근 이름이 정확히 "가구원 수"인 input[type=number](spinbutton), min="1"·max="20"(MAX_PEOPLE)
+//     - −/+: 접근 이름이 정확히 "가구원 수 줄이기"·"가구원 수 늘리기"인 button 하나씩, 한 번에 1명. 4폭에서 44×44px 이상.
+//       안의 아이콘 svg 하나는 aria-hidden="true"(그림 파일 widgets/emergency-kit/ui/calc-icons.tsx, 고지는 tests/test_m17_calc_icons.py)
+//     - 끝값(1명 줄이기·20명 늘리기)은 disabled 대신 aria-disabled="true"(포커스를 잃지 않게). 눌러도 값·포커스 그대로
+//     - 잘못된 값에서 누르면 1~20 으로 맞춘다: 빈칸·0·음수 → 1, 21 이상 → 20, 소수 → 누른 방향의 정수(1.5 에서 + → 2, − → 1)
+//     - Tab 순서 줄이기 → 숫자 칸 → 늘리기 → 기간 칩. Enter·Space 로 버튼 동작, 포커스 표시(outline 또는 box-shadow)가 보인다
+//   - 기간 칩: 접근 이름 "기간"인 radiogroup(SegmentedControl 이나 같은 구조), radio 글자 = KIT_PERIODS label(순서 그대로),
+//     고른 칩만 aria-checked="true", 칩 높이 40px 이상
+//   - 입력 저장(#106, plan.md Q7): localStorage "war-risk:kit-calc:v1" 에 바른 값일 때만 {"people":정수,"period":KIT_PERIODS id}
+//     두 키의 JSON. 새로 고쳐도 남고, 저장값은 마운트 뒤에 읽는다(기본값과 달라도 하이드레이션 경고 없음).
+//     없거나 깨졌거나 한 칸이라도 범위 밖이면 4명·7일 비축(읽기 규칙은 kit.ts readKitCalc, kit.test.ts)
 //   - 결과: #calc 안 aria-live="polite" 요소 하나. 값을 넣기 전부터 DOM 에 있고(잘못된 값일 때도 남는다),
-//     입력(가구원 수·기간)과 계산 기준 글자는 품지 않는다. 바른 값이면 그 안에 보이는 글자로
+//     입력(숫자 칸·−/+·기간)과 계산 기준 글자는 품지 않는다. 바른 값이면 그 안에 보이는 글자로
 //     합계 "물 84L(약 84kg) · 식량 84끼"(공백·기호 그대로, 숫자 사이를 다른 요소로 나눠도 글자는 이대로), 1인당 "1인당"과 "물 21L · 21끼".
 //     1인당 줄은 기간과 관계없이 "물 {L}L · {끼}끼" 꼴 그대로(무게를 넣지 않는다)
 //   - "3일 가방"일 때만 #calc 안에 "가방은 한 사람에 하나" 안내와 1인당 물 무게 "약 9kg"(가구원이 4명이어도 1인분)이 보인다
 //   - 잘못된 가구원 수(0·21·1.5·빈칸): #calc 안에 "1~20 사이 정수로 입력해 주세요"가 보이고, live 영역에 보이는 L·kg·끼 숫자가 없다.
 //     바른 값으로 고치면 안내가 사라지고 결과가 다시 보인다
 //   - 계산 기준 "1인 1일 물 3L·3끼" 글자와 출처 링크(KIT_SOURCES 중 하나 이상의 url, target="_blank", rel 에 noreferrer)
-//   - 배치: md 미만은 입력 아래에 결과, md 이상은 입력과 결과가 한 줄(세로 범위가 겹치고 결과가 입력 오른쪽)
+//   - 배치: md 미만은 입력 아래에 결과, md 이상은 입력(−/+ 포함)과 결과가 한 줄(세로 범위가 겹치고 결과가 입력 오른쪽)
 // - 체크·계산은 브라우저 안에서만 한다: 그동안 네트워크 요청 0건(지연 로딩 청크 포함)
 // - 홈 체크리스트 카드(ActionGuide: "단계별 가이드" 버튼에서 체크박스까지 품은 가장 가까운 조상) 안에 a[href="/emergency#kit"] 하나.
 //   같은 탭에서 열리고, 누르면 가방 영역이 화면 안
@@ -408,6 +418,277 @@ for (const width of WIDTHS) {
     await expect(calc.getByText(INVALID).first(), "빈칸 안내").toBeVisible();
     await settle(page);
     await expectNoOverflow(page, "빈칸 안내");
+    expect.soft(errors, "콘솔 오류(하이드레이션 포함)").toEqual([]);
+  });
+}
+
+// ── 이슈 #106(1-7) 계산기 입력: −/+ 버튼·기간 칩·입력 저장. 계약은 머리 주석 "계산기 영역" ──
+const CALC_KEY = "war-risk:kit-calc:v1"; // 인수 조건 글자 그대로(kit.ts KIT_CALC_STORAGE_KEY 와 같은지는 kit.test.ts 가 본다)
+const DEC = "가구원 수 줄이기";
+const INC = "가구원 수 늘리기";
+const TARGET_MIN_PX = 44; // −/+ 버튼 가로·세로 최소(plan.md 7-8)
+const CHIP_MIN_PX = 40; // 기간 칩 높이 최소
+const LATE_SAVE_MS = 1_000; // 잘못된 값이 늦게(디바운스) 저장되지 않는지 볼 때 기다리는 시간
+const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
+const WEEK_PER_PERSON = 21; // 1인 7일 물 21L·21끼
+/** n명·7일 비축 결과 글자 */
+const week = (n: number): Case => ({
+  people: String(n),
+  period: "7일 비축",
+  total: `물 ${n * WEEK_PER_PERSON}L(약 ${n * WEEK_PER_PERSON}kg) · 식량 ${n * WEEK_PER_PERSON}끼`,
+  each: `물 ${WEEK_PER_PERSON}L · ${WEEK_PER_PERSON}끼`,
+});
+const FOUR_TWO_WEEKS: Case = { people: "4", period: "14일 비축", total: "물 168L(약 168kg) · 식량 168끼", each: "물 42L · 42끼" };
+const SIX_TWO_WEEKS: Case = { people: "6", period: "14일 비축", total: "물 252L(약 252kg) · 식량 252끼", each: "물 42L · 42끼" }; // 인수 조건
+const SIX_TWO_WEEKS_SAVED = { people: 6, period: "stock14" }; // 인수 조건 저장값(다른 키 없음)
+// 깨졌거나 범위 밖인 저장값: 한 칸만 틀려도 통째로 기본값(4명·7일 비축)
+const BAD_SAVED = [
+  { label: "JSON 아님", raw: "{people:6" },
+  { label: "people 0", raw: '{"people":0,"period":"stock14"}' },
+  { label: 'period "x"', raw: '{"people":6,"period":"x"}' },
+];
+
+/** −/+ 버튼. 하나씩이 아니면 바로 멈춘다(없는 버튼 클릭이 테스트 제한 시간까지 기다리지 않게) */
+async function steppersOf(calc: Locator) {
+  const dec = calc.getByRole("button", { name: DEC, exact: true });
+  const inc = calc.getByRole("button", { name: INC, exact: true });
+  await expect(dec, `"${DEC}" 버튼 하나`).toHaveCount(1);
+  await expect(inc, `"${INC}" 버튼 하나`).toHaveCount(1);
+  return { dec, inc };
+}
+const chipOf = (calc: Locator, label: string) => periodsOf(calc).getByRole("radio", { name: label, exact: true });
+/** CALC_KEY 저장값: JSON 이면 읽은 값, 아니면 원문(깨진 값도 실패 메시지에 그대로 보이게) */
+async function storedCalc(page: Page): Promise<unknown> {
+  const raw = await storedValue(page, CALC_KEY);
+  try {
+    return JSON.parse(raw ?? "null");
+  } catch {
+    return raw;
+  }
+}
+/** 칸 값·고른 칩(aria-checked)·live 합계가 c 와 같다. 새로 고친 뒤 저장값은 마운트 뒤에 들어오므로 기다린다 */
+async function expectInputs(calc: Locator, c: Case, label: string) {
+  await expect.soft(peopleOf(calc), `${label}: 가구원 수 ${c.people}`).toHaveValue(c.people);
+  await expect.soft(chipOf(calc, c.period), `${label}: 기간 ${c.period}`).toHaveAttribute("aria-checked", "true");
+  await expect.soft(liveOf(calc).getByText(c.total).first(), `${label}: ${c.total}`).toBeVisible();
+}
+/** 지금 포커스한 요소의 포커스 표시: 보이는 outline 또는 box-shadow(Tailwind ring). footer.spec.ts 와 같은 판정 */
+const focusRingShown = (page: Page) => page.evaluate((transparent) => {
+  const el = document.activeElement;
+  if (!el) return false;
+  const s = getComputedStyle(el);
+  const outline = s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && !new RegExp(transparent).test(s.outlineColor);
+  return outline || s.boxShadow !== "none";
+}, TRANSPARENT.source);
+
+test("−/+ 버튼: #calc 안 가구원 수 줄이기·늘리기 하나씩, 그 사이에 spinbutton 가구원 수, 아이콘 svg 는 aria-hidden, live 영역 밖", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  const { dec, inc } = await steppersOf(calc);
+  const [d, p, i] = await Promise.all([dec, peopleOf(calc), inc].map(box));
+  expect.soft(sameLine(d, p) && sameLine(p, i), "줄이기·숫자 칸·늘리기가 한 줄").toBe(true);
+  expect.soft(p.x, "숫자 칸이 줄이기 오른쪽").toBeGreaterThanOrEqual(d.right - TOLERANCE_PX);
+  expect.soft(i.x, "늘리기가 숫자 칸 오른쪽").toBeGreaterThanOrEqual(p.right - TOLERANCE_PX);
+  for (const [name, button] of [[DEC, dec], [INC, inc]] as const) {
+    await expect.soft(button.locator("svg"), `${name}: 아이콘 svg 하나`).toHaveCount(1);
+    await expect.soft(button.locator('svg[aria-hidden="true"]'), `${name}: 아이콘 aria-hidden="true"`).toHaveCount(1);
+  }
+  await expect.soft(liveOf(calc).getByRole("button", { name: /^가구원 수 (?:줄이기|늘리기)$/ }), "live 영역 안 −/+ 버튼").toHaveCount(0);
+});
+
+test("−/+: 4명·7일 비축에서 늘리기 한 번이면 1초 안에 칸 값 5·물 105L(약 105kg) · 식량 105끼, 줄이기면 다시 84L", async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  const calc = calcOf(page);
+  const { dec, inc } = await steppersOf(calc);
+  await calculate(calc, FOUR_WEEK);
+  await expectResult(calc, FOUR_WEEK);
+  await inc.click();
+  await expect(peopleOf(calc), "늘리기 뒤 칸 값").toHaveValue("5", { timeout: RESULT_TIMEOUT_MS });
+  await expectResult(calc, week(5), RESULT_TIMEOUT_MS);
+  await dec.click();
+  await expect(peopleOf(calc), "줄이기 뒤 칸 값").toHaveValue(FOUR_WEEK.people);
+  await expectResult(calc, FOUR_WEEK);
+  expect.soft(errors, "콘솔 오류").toEqual([]);
+});
+
+test("−/+ 끝값: 1명 줄이기·20명 늘리기는 aria-disabled=true, Enter·Space·클릭해도 값 그대로, 포커스는 그 버튼에 남음", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  const people = peopleOf(calc);
+  const { dec, inc } = await steppersOf(calc);
+  await expect.soft(dec, "4명: 줄이기는 비활성 아님").not.toHaveAttribute("aria-disabled", "true");
+  await expect.soft(inc, "4명: 늘리기는 비활성 아님").not.toHaveAttribute("aria-disabled", "true");
+  const edges = [
+    { name: DEC, button: dec, other: inc, start: "2", edge: "1" },
+    { name: INC, button: inc, other: dec, start: String(MAX_PEOPLE - 1), edge: String(MAX_PEOPLE) },
+  ];
+  for (const { name, button, other, start, edge } of edges) {
+    // 키보드로 끝값에 닿게 한다(disabled 로 만들면 이때 브라우저가 포커스를 버린다)
+    await people.fill(start);
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(people, `${start}명에서 ${name}`).toHaveValue(edge);
+    await expect.soft(button, `${edge}명: ${name} aria-disabled`).toHaveAttribute("aria-disabled", "true");
+    await expect.soft(other, `${edge}명: 반대쪽 버튼은 비활성 아님`).not.toHaveAttribute("aria-disabled", "true");
+    for (const key of ["Enter", "Space"]) {
+      await page.keyboard.press(key);
+      await expect.soft(people, `${edge}명에서 ${name} ${key}: 값 그대로`).toHaveValue(edge);
+      await expect.soft(button, `${edge}명에서 ${name} ${key}: 포커스 그대로`).toBeFocused();
+    }
+    await button.click({ force: true }); // aria-disabled 라 Playwright 는 force 없이 누르지 않는다
+    await expect.soft(people, `${edge}명에서 ${name} 클릭: 값 그대로`).toHaveValue(edge);
+  }
+});
+
+test("−/+ 맞추기: 잘못된 값에서 누르면 1~20 안으로(빈칸 + → 1, 21 − → 20, 25 − → 20, 1.5 + → 2, 1.5 − → 1), 안내가 사라지고 결과", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  const live = liveOf(calc);
+  const { dec, inc } = await steppersOf(calc);
+  const cases = [
+    { value: "", button: inc, sign: "+", to: 1 }, // 빈칸·0·음수 → 1
+    { value: "21", button: dec, sign: "−", to: 20 }, // 21 이상 → 20
+    { value: "25", button: dec, sign: "−", to: 20 }, // 한 칸 줄인 24 가 아니다
+    { value: "1.5", button: inc, sign: "+", to: 2 }, // 소수 → 누른 방향의 정수
+    { value: "1.5", button: dec, sign: "−", to: 1 },
+  ];
+  for (const { value, button, sign, to } of cases) {
+    const shown = value === "" ? "빈칸" : value;
+    await peopleOf(calc).fill(value);
+    await expect.soft(calc.getByText(INVALID).first(), `${shown}: 안내 문구`).toBeVisible();
+    await expect.soft(live.getByText(RESULT_NUMBER).filter({ visible: true }), `${shown}: live 영역에 보이는 L·kg·끼 결과`).toHaveCount(0);
+    await button.click();
+    await expect.soft(peopleOf(calc), `${shown} 에서 ${sign}: 칸 값`).toHaveValue(String(to));
+    await expect.soft(live.getByText(week(to).total).first(), `${shown} 에서 ${sign}: 결과 ${week(to).total}`).toBeVisible();
+    await expect.soft(calc.getByText(INVALID).filter({ visible: true }), `${shown} 에서 ${sign}: 안내 사라짐`).toHaveCount(0);
+  }
+});
+
+test("기간 칩: 누르면 그 칩만 aria-checked=true, 1초 안에 결과가 바뀜(4명 14일 168L → 3일 36L → 7일 84L)", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  await calculate(calc, FOUR_WEEK);
+  for (const c of [FOUR_TWO_WEEKS, FOUR_BAG, FOUR_WEEK]) {
+    await chipOf(calc, c.period).click();
+    await expect.soft(chipOf(calc, c.period), `${c.period}: aria-checked`).toHaveAttribute("aria-checked", "true");
+    for (const p of KIT_PERIODS.filter((p) => p.label !== c.period)) {
+      await expect.soft(chipOf(calc, p.label), `${c.period} 누른 뒤 ${p.label}`).not.toHaveAttribute("aria-checked", "true");
+    }
+    await expectResult(calc, c, RESULT_TIMEOUT_MS);
+  }
+});
+
+test("입력 저장: 처음은 4명·7일 비축, 6명·14일 비축이면 war-risk:kit-calc:v1 = {people:6, period:stock14}·새로 고쳐도 그대로, 빈칸은 저장 안 함, 깨진·범위 밖 저장값은 4명·7일 비축", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  await expectInputs(calc, FOUR_WEEK, "처음 열 때(저장값 없음)");
+
+  await calculate(calc, SIX_TWO_WEEKS);
+  await expectResult(calc, SIX_TWO_WEEKS);
+  await expect.soft.poll(() => storedCalc(page), `${CALC_KEY} 저장값(두 키만)`).toEqual(SIX_TWO_WEEKS_SAVED);
+  await page.reload({ waitUntil: "networkidle" });
+  await expectInputs(calc, SIX_TWO_WEEKS, "새로 고친 뒤");
+
+  await peopleOf(calc).fill("");
+  await expect(calc.getByText(INVALID).first(), "빈칸 안내").toBeVisible();
+  await page.waitForTimeout(LATE_SAVE_MS); // 기다릴 사건이 없어(저장하지 않아야 정상) 시간으로 기다린다
+  expect.soft(await storedCalc(page), "빈칸은 저장하지 않음(마지막 바른 값 그대로)").toEqual(SIX_TWO_WEEKS_SAVED);
+  await page.reload({ waitUntil: "networkidle" });
+  await expectInputs(calc, SIX_TWO_WEEKS, "빈칸에서 새로 고친 뒤(마지막 바른 값)");
+
+  for (const { label, raw } of BAD_SAVED) {
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [CALC_KEY, raw]);
+    await page.reload({ waitUntil: "networkidle" });
+    await expectInputs(calc, FOUR_WEEK, `저장값 ${label}`);
+  }
+});
+
+test("키보드: Tab 순서 줄이기 → 숫자 칸 → 늘리기 → 기간 칩, 포커스 표시가 보임, Enter·Space 로 −/+ 동작", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  const { dec, inc } = await steppersOf(calc);
+  await calculate(calc, FOUR_WEEK);
+  await dec.focus();
+  await page.keyboard.press("Tab");
+  await expect.soft(peopleOf(calc), "줄이기 다음 Tab: 숫자 칸").toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect.soft(inc, "숫자 칸 다음 Tab: 늘리기").toBeFocused();
+  expect.soft(await focusRingShown(page), "늘리기 포커스 표시").toBe(true);
+  await page.keyboard.press("Tab");
+  const onChip = await periodsOf(calc).getByRole("radio").evaluateAll((radios) => radios.some((r) => r === document.activeElement));
+  expect.soft(onChip, "늘리기 다음 Tab: 기간 칩").toBe(true);
+  expect.soft(await focusRingShown(page), "기간 칩 포커스 표시").toBe(true);
+  for (let n = 0; n < 3; n++) await page.keyboard.press("Shift+Tab"); // 칩 → 늘리기 → 숫자 칸 → 줄이기
+  await expect.soft(dec, "Shift+Tab 세 번: 줄이기").toBeFocused();
+  expect.soft(await focusRingShown(page), "줄이기 포커스 표시").toBe(true);
+
+  // 4 → 5 → 6 → 5 → 4
+  const presses = [[inc, INC, "Enter", "5"], [inc, INC, "Space", "6"], [dec, DEC, "Enter", "5"], [dec, DEC, "Space", "4"]] as const;
+  for (const [button, name, key, value] of presses) {
+    await button.focus();
+    await page.keyboard.press(key);
+    await expect.soft(peopleOf(calc), `${name} ${key}: ${value}명`).toHaveValue(value);
+  }
+  await expectResult(calc, FOUR_WEEK);
+});
+
+test("입력·저장하는 동안 네트워크 요청 0건(−/+·기간 칩·숫자 칸·잘못된 값 맞추기)", async ({ page }) => {
+  await open(page);
+  const calc = calcOf(page);
+  const { dec, inc } = await steppersOf(calc);
+  const requests: string[] = [];
+  page.on("request", (r) => {
+    if (!DEV_ONLY.test(r.url())) requests.push(`${r.method()} ${r.url()}`);
+  });
+  await inc.click();
+  await dec.click();
+  await chipOf(calc, FOUR_TWO_WEEKS.period).click();
+  await expectResult(calc, FOUR_TWO_WEEKS);
+  await peopleOf(calc).fill("");
+  await expect(calc.getByText(INVALID).first(), "빈칸 안내").toBeVisible();
+  await inc.click(); // 빈칸 → 1
+  await expect(peopleOf(calc), "빈칸에서 늘리기").toHaveValue("1");
+  await expect.soft.poll(() => storedCalc(page), "저장까지 기다림").toEqual({ people: 1, period: "stock14" });
+  // 기다릴 사건이 없어(요청이 없어야 정상) 시간으로 기다린다
+  await page.waitForTimeout(LATE_REQUEST_MS);
+  expect(requests, "입력·저장 중 보낸 요청").toEqual([]);
+});
+
+for (const width of WIDTHS) {
+  const wide = width >= MD;
+  test(`${width}px: −/+ 44×44px·기간 칩 높이 40px 이상, 20명·14일 결과가 입력(−/+ 포함) ${wide ? "오른쪽 한 줄" : "아래"}·가로 넘침 없음, 저장값(6명·14일)으로 열어도 콘솔 오류(하이드레이션 포함) 0건`, async ({ page }) => {
+    const errors = trackErrors(page);
+    await open(page, width);
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [CALC_KEY, JSON.stringify(SIX_TWO_WEEKS_SAVED)]);
+    await page.reload({ waitUntil: "networkidle" });
+    const calc = calcOf(page);
+    const { dec, inc } = await steppersOf(calc);
+    await expect.soft(peopleOf(calc), "저장값(6명)으로 열림").toHaveValue(SIX_TWO_WEEKS.people);
+    for (const [name, button] of [[DEC, dec], [INC, inc]] as const) {
+      const b = await box(button);
+      expect.soft(b.width, `${name} 가로`).toBeGreaterThanOrEqual(TARGET_MIN_PX);
+      expect.soft(b.height, `${name} 세로`).toBeGreaterThanOrEqual(TARGET_MIN_PX);
+    }
+    for (const p of KIT_PERIODS) {
+      expect.soft((await box(chipOf(calc, p.label))).height, `칩 "${p.label}" 높이`).toBeGreaterThanOrEqual(CHIP_MIN_PX);
+    }
+
+    await calculate(calc, MAX_TWO_WEEKS);
+    await expectResult(calc, MAX_TWO_WEEKS);
+    await settle(page);
+    await expectNoOverflow(page, `${MAX_TWO_WEEKS.people}명·${MAX_TWO_WEEKS.period}`);
+    const inputs = await Promise.all([dec, peopleOf(calc), inc, periodsOf(calc)].map(box));
+    const result = await box(liveOf(calc));
+    const top = Math.min(...inputs.map((b) => b.y));
+    const bottom = Math.max(...inputs.map((b) => b.bottom));
+    const right = Math.max(...inputs.map((b) => b.right));
+    if (wide) {
+      expect.soft(result.y < bottom && top < result.bottom, "입력과 결과 한 줄").toBe(true);
+      expect.soft(result.x, "결과가 입력 오른쪽").toBeGreaterThanOrEqual(right - TOLERANCE_PX);
+    } else {
+      expect.soft(result.y, "결과가 입력 아래").toBeGreaterThanOrEqual(bottom - TOLERANCE_PX);
+    }
     expect.soft(errors, "콘솔 오류(하이드레이션 포함)").toEqual([]);
   });
 }
