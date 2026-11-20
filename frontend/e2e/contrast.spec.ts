@@ -229,6 +229,19 @@ const STATES: State[] = [
         .toBeVisible({ timeout: DATA_TIMEOUT_MS });
     },
   },
+  // 경보 상세(이슈 #104 /emergency/[alert]): 정적 페이지라 데이터를 기다리지 않는다. 사이렌 표시·대피소 링크가 있는 공습경보를 기본으로 잰다.
+  // 접힌 "더 보기" 안쪽도 크기가 있어 기본 상태에서 이미 잰다. 펼친 화면은 행동요령이 가장 긴 핵경보로 한 번 더 잰다
+  { name: "경보 상세 기본(공습경보)", path: "/emergency/air-raid" },
+  {
+    name: "경보 상세 더 보기 펼침(핵경보)",
+    path: "/emergency/nuclear",
+    act: async (page) => {
+      await hydrated(page);
+      const details = page.locator("main details");
+      await details.locator("summary").click();
+      await expect(details).toHaveAttribute("open");
+    },
+  },
   { name: "비상 대비 페이지 기본", path: "/emergency" },
   KIT_CHECK,
   {
