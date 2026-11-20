@@ -3,7 +3,7 @@
 
 type AlertSourceKey = "mois-alarm" | "mois-actions" | "mois-emergency";
 // 핵심 행동 그림 이름. 그림은 경보 상세 화면의 대응표가 그린다(이 파일은 node --test 로 돌아야 해 React 아이콘을 import 하지 않는다)
-export type KeyActionIcon = "go-down" | "building" | "walk" | "radio" | "bag" | "gas-off" | "cover-face" | "wind" | "seal" | "get-down" | "stay" | "rescue";
+export type KeyActionIcon = "go-down" | "building" | "stairs" | "radio" | "bag" | "gas-off" | "cover-face" | "wind" | "seal" | "get-down" | "stay" | "rescue";
 
 export interface CivilAlert {
   id: "alert" | "air-raid" | "cbr" | "nuclear" | "all-clear";
@@ -64,7 +64,7 @@ export const CIVIL_ALERTS: CivilAlert[] = [
     keyActions: [
       { from: "air-raid-shelter", text: "가장 가까운 지하로 바로 대피하기", icon: "go-down" },
       { from: "air-raid-indoor", text: "지하로 못 가면 콘크리트 건물 안 유리창 없는 곳으로", icon: "building" },
-      { from: "air-raid-stairs", text: "엘리베이터 말고 계단으로 내려가기", icon: "walk" },
+      { from: "air-raid-stairs", text: "엘리베이터 말고 계단으로 내려가기", icon: "stairs" },
     ],
   },
   {
