@@ -239,6 +239,12 @@ const STATES: State[] = [
       const calc = calcOf(page);
       await calc.getByRole("radiogroup", { name: "기간", exact: true }).getByRole("radio", { name: "3일 가방", exact: true }).click();
       await peopleOf(page).fill(KIT_PEOPLE);
+      // #106 새 입력부: −/+ 버튼을 한 번씩 눌러 다시 KIT_PEOPLE 명(버튼이 있는 화면을 잰다)
+      for (const name of ["가구원 수 늘리기", "가구원 수 줄이기"]) {
+        const button = calc.getByRole("button", { name, exact: true });
+        await expect(button, name).toBeVisible();
+        await button.click();
+      }
       // 결과·가방 안내·1인당 물 무게가 다 보인 뒤 잰다
       for (const text of ["물 36L(약 36kg) · 식량 36끼", "가방은 한 사람에 하나", "약 9kg"]) {
         await expect(calc.getByText(text).first(), text).toBeVisible();
@@ -250,8 +256,10 @@ const STATES: State[] = [
     path: "/emergency",
     act: async (page) => {
       await hydrated(page);
-      // 바른 값을 넣었다 지워 빈칸 안내를 띄운다(처음부터 빈칸이어도 입력 사건이 일어나게)
-      await peopleOf(page).fill(KIT_PEOPLE);
+      // #106 새 입력부: 늘리기(+)로 바른 값을 만든 뒤 숫자 칸을 지워 빈칸 안내를 띄운다(처음부터 빈칸이어도 입력 사건이 일어나게)
+      const inc = calcOf(page).getByRole("button", { name: "가구원 수 늘리기", exact: true });
+      await expect(inc, "가구원 수 늘리기").toBeVisible();
+      await inc.click();
       await peopleOf(page).fill("");
       await expect(calcOf(page).getByText("1~20 사이 정수로 입력해 주세요").first(), "빈칸 안내").toBeVisible();
     },
