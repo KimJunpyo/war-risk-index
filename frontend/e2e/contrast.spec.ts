@@ -242,7 +242,24 @@ const STATES: State[] = [
       await expect(details).toHaveAttribute("open");
     },
   },
+  // 이슈 #108 첫 화면(경보 타일·미리 준비하기 카드)은 기본 상태가 잰다(저장값이 없어 카드는 0/7·0/8, 4명·7일 비축).
+  // 카드가 저장값(가방 두 목록에서 하나씩 2개 담음, 6명·14일 비축)을 그린 화면을 한 번 더 잰다. 저장값은 하이드레이션 뒤에 카드에 들어온다
   { name: "비상 대비 페이지 기본", path: "/emergency" },
+  {
+    name: "준비 카드 진행 중",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      await page.evaluate(() => {
+        localStorage.setItem("war-risk:kit:v1", '["bag-water-food","stock-water"]');
+        localStorage.setItem("war-risk:kit-calc:v1", '{"people":6,"period":"stock14"}');
+      });
+      await page.reload();
+      await hydrated(page);
+      await expect(page.locator('main a[href="#kit"]'), "가방 카드 1/8 챙김").toContainText("1/8 챙김");
+      await expect(page.locator('main a[href="#calc"]'), "물 카드 252L").toContainText("물 252L(약 252kg)");
+    },
+  },
   KIT_CHECK,
   {
     name: "비상 대비 계산 결과(3일 가방)",

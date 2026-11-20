@@ -1,19 +1,24 @@
 import Link from "next/link";
-import { ALERT_ICON, ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "@/entities/guide";
+import { ALERT_ICON, CIVIL_ALERTS } from "@/entities/guide";
 import { Icon } from "@/shared/ui";
-import { KitCalculator, KitChecklist } from "@/widgets/emergency-kit";
+import { KitCalculator, KitChecklist, KitSummary } from "@/widgets/emergency-kit";
 import { SiteFooter } from "@/widgets/site-footer";
-import { ALERT_COLOR } from "./alert-color";
+import { ALERT_COLOR, ALERT_TILE } from "./alert-color";
 
-const LABEL = "text-xs text-fg-muted";
 const SECTION_TITLE = "mb-3 text-sm font-semibold tracking-wide text-fg-soft";
-// 경보 뒤 영역(1-5). 목차 칩 글자와 영역 제목에 같은 이름을 쓴다
+// 첫 화면 두 영역(경보 타일·미리 준비하기) 제목. 경보 상세의 "지금 할 일 3가지"와 같은 크기
+const SCREEN_TITLE = "mb-3 text-lg font-semibold text-fg-strong";
+const DETAIL_BASE = "/emergency"; // 경보 상세(1-5) 주소는 /emergency/{경보 id}
+// 경보 타일: 카드 전체가 링크, 높이 80px 이상(plan.md 7-8). 포커스 표시는 가방 타일과 같다
+const TILE =
+  "flex h-full min-h-20 flex-col rounded-2xl border border-line p-4 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-soft";
+// 경보 뒤 영역(1-5). 첫 화면 준비 카드(KitSummary)와 홈 체크리스트 카드(/emergency#kit)가 이 id 로 온다
 const KIT = { id: "kit", name: "비상 가방" };
 const CALC = { id: "calc", name: "물·식량 계산" };
-const TOC = [...CIVIL_ALERTS, KIT, CALC];
 
-/** 비상 대비 안내: 머리말·목차·경보 카드·비상 가방·물·식량 계산·푸터. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은 두지 않는다
- *  (가방 체크 저장·계산기는 브라우저 안에서만 동작하는 클라이언트 위젯, 푸터는 정적 출처 목록만 그림) */
+/** 비상 대비 안내 첫 화면: 머리말 → "지금 어떤 경보인가요?" 경보 타일 5개(→ 경보 상세) → "미리 준비하기" 카드(가방 진행·우리 집 물)
+ *  → 비상 가방 → 물·식량 계산 → 푸터. 행동요령 문장·출처는 상세의 "더 보기"에 있다. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은
+ *  두지 않는다(준비 카드·가방 담기·계산기는 브라우저 안에서만 동작하는 클라이언트 위젯, 푸터는 정적 출처 목록만 그림) */
 export function EmergencyPage() {
   return (
     <main className="mx-auto w-full max-w-page px-4 py-6 md:px-6 md:py-8 lg:px-8">
@@ -22,33 +27,31 @@ export function EmergencyPage() {
           <span aria-hidden="true">←</span> 전체 지도
         </Link>
         <h1 className="mt-3 text-xl font-bold tracking-tight text-fg-strong md:text-2xl">비상 대비 안내</h1>
-        <p className="mt-1 text-sm text-fg-muted">민방위 경보 5종별 행동요령, 비상 가방 목록, 가구원 수에 맞춘 물·식량 계산을 정리했습니다.</p>
         <p className="mt-3 rounded-xl border border-line px-4 py-3 text-xs text-fg-soft">
           개인이 만든 참고용 안내입니다. 정부·민방위의 공식 경보와 안내가 항상 우선합니다.
         </p>
       </header>
 
-      {/* 목차: 지금 있는 영역만 앵커로 건다 */}
-      <nav aria-label="목차" className="mb-6">
-        <ul className="flex flex-wrap gap-2">
-          {TOC.map((t) => (
-            <li key={t.id}>
-              <a
-                href={`#${t.id}`}
-                className="inline-block rounded-full border border-line-strong px-3 py-1 text-xs text-fg-soft transition hover:bg-surface-hover"
-              >
-                {t.name}
-              </a>
+      <section aria-labelledby="alerts-title">
+        <h2 id="alerts-title" className={SCREEN_TITLE}>지금 어떤 경보인가요?</h2>
+        {/* 열 수 360 2열·md 3열·lg 이상 5열 한 줄(plan.md 7-7). 5개라 2·3열에서는 마지막(경보해제)이 두 칸을 채운다 */}
+        <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          {CIVIL_ALERTS.map((a) => (
+            <li key={a.id} className="last:col-span-2 lg:last:col-span-1">
+              {/* 아이콘·이름은 경보 색(currentColor), 알리는 방법은 siren 에서 만든다(국민안전24 기준 공습·핵만 사이렌) */}
+              <Link href={`${DETAIL_BASE}/${a.id}`} className={`${TILE} ${ALERT_TILE[a.id]} ${ALERT_COLOR[a.id]}`}>
+                <Icon className="h-6 w-6 shrink-0">{ALERT_ICON[a.id]()}</Icon>
+                <span className="mt-2 text-lg font-semibold">{a.name}</span>
+                <span className="text-sm text-fg-soft">{a.siren ? "사이렌" : "방송·문자"}</span>
+              </Link>
             </li>
           ))}
         </ul>
-      </nav>
+      </section>
 
-      <section aria-labelledby="alerts-title">
-        <h2 id="alerts-title" className={SECTION_TITLE}>경보별 행동요령</h2>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {CIVIL_ALERTS.map((a) => <AlertCard key={a.id} alert={a} />)}
-        </div>
+      <section aria-labelledby="prep-title" className="mt-8">
+        <h2 id="prep-title" className={SCREEN_TITLE}>미리 준비하기</h2>
+        <KitSummary />
       </section>
 
       <section id={KIT.id} aria-labelledby="kit-title" className="mt-10">
@@ -63,50 +66,5 @@ export function EmergencyPage() {
 
       <SiteFooter />
     </main>
-  );
-}
-
-/** 경보 카드: 아이콘·이름(경보별 색, 아이콘도 같은 색)·언제·어떻게 알리나·할 일(번호 목록)·출처(새 탭)와 확인일 */
-function AlertCard({ alert: a }: { alert: CivilAlert }) {
-  return (
-    <article id={a.id} className="rounded-2xl border border-line bg-surface p-5">
-      <h3 className={`flex items-center gap-2 text-lg font-semibold ${ALERT_COLOR[a.id]}`}>
-        <Icon className="h-5 w-5 shrink-0">{ALERT_ICON[a.id]()}</Icon>
-        {a.name}
-      </h3>
-      <dl className="mt-3 space-y-3 text-sm">
-        <div>
-          <dt className={LABEL}>언제</dt>
-          <dd className="mt-0.5 text-fg">{a.when}</dd>
-        </div>
-        <div>
-          <dt className={LABEL}>어떻게 알리나</dt>
-          <dd className="mt-0.5 text-fg">{a.signal}</dd>
-        </div>
-        <div>
-          <dt className={LABEL}>할 일</dt>
-          <dd className="mt-1">
-            <ol className="list-decimal space-y-1.5 pl-5 text-fg-soft">
-              {a.actions.map((x) => <li key={x.id}>{x.text}</li>)}
-            </ol>
-          </dd>
-        </div>
-      </dl>
-      <p className={`mt-4 ${LABEL}`}>출처 · 문구는 자체 작성</p>
-      {/* 360 터치 간격: 줄 높이 19.5px + 간격 8px = 링크 중심 간 27.5px(24px 이상) */}
-      <ul className={`mt-1 space-y-2 leading-relaxed ${LABEL}`}>
-        {a.sources.map((key) => {
-          const s = ALERT_SOURCES[key];
-          return (
-            <li key={key}>
-              <a href={s.url} target="_blank" rel="noreferrer" className="underline decoration-link-line hover:text-fg">
-                {s.name}
-              </a>{" "}
-              ({s.checkedAt} 확인)
-            </li>
-          );
-        })}
-      </ul>
-    </article>
   );
 }
