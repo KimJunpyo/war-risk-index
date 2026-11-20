@@ -1,7 +1,8 @@
 /*
- * 핵심 행동 아이콘 그림: Lucide(https://lucide.dev) 아이콘 arrow-down-to-line·building·footprints·radio·backpack·unplug·
+ * 핵심 행동 아이콘 그림: Lucide(https://lucide.dev) 아이콘 arrow-down-to-line·building·radio·backpack·unplug·
  * mouth-off·wind·door-closed·eye-off·hourglass·hand-helping·map-pin 의 도형(path·circle·rect)을
  * lucide 저장소 icons/<이름>.svg 원본에서 그대로 옮겼다.
+ * 계단으로 내려가기(stairs)는 lucide 에 계단 그림이 없어 같은 틀(24×24, 선 두께 2, 둥근 선 끝·이음)로 직접 그렸다(plan.md Q1).
  * Lucide 라이선스(ISC License) 고지:
  *
  * Copyright (c) 2026 Lucide Icons and Contributors
@@ -44,7 +45,7 @@ import type { ReactNode } from "react";
 import type { KeyActionIcon } from "@/entities/guide";
 
 /** 핵심 행동(keyActions 의 icon)별 그림을 돌려주는 함수. 틀은 shared/ui 의 Icon 으로 감싼다: <Icon className="h-7 w-7">{KEY_ACTION_ICON[icon]()}</Icon>
- *  지하로 arrow-down-to-line, 건물 안 building, 계단으로 footprints(plan.md 7-2 시안의 발자국), 방송 듣기 radio, 대피 준비 backpack,
+ *  지하로 arrow-down-to-line, 건물 안 building, 계단으로 stairs(직접 그림: 바닥까지 내려오는 계단), 방송 듣기 radio, 대피 준비 backpack,
  *  가스·전기 끄기 unplug, 코와 입 가리기 mouth-off, 바람 방향 wind, 틈 막기 door-closed, 엎드려 눈·귀 막기 eye-off,
  *  머물기 hourglass, 구조 hand-helping. 값을 함수로 두는 이유는 entities/guide 의 ALERT_ICON 과 같다 */
 export const KEY_ACTION_ICON: Record<KeyActionIcon, () => ReactNode> = {
@@ -70,12 +71,10 @@ export const KEY_ACTION_ICON: Record<KeyActionIcon, () => ReactNode> = {
       <rect x="4" y="2" width="16" height="20" rx="2" />
     </>
   ),
-  walk: () => (
+  stairs: () => (
     <>
-      <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
-      <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" />
-      <path d="M16 17h4" />
-      <path d="M4 13h4" />
+      <path d="M2 4h4v4h4v4h4v4h4v4" />
+      <path d="M2 20h20" />
     </>
   ),
   radio: () => (
