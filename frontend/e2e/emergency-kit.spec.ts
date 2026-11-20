@@ -40,7 +40,7 @@ import { GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, ST
 //   - 입력 저장(#106, plan.md Q7): localStorage "war-risk:kit-calc:v1" 에 바른 값일 때만 {"people":정수,"period":KIT_PERIODS id}
 //     두 키의 JSON. 새로 고쳐도 남고, 저장값은 마운트 뒤에 읽는다(기본값과 달라도 하이드레이션 경고 없음).
 //     없거나 깨졌거나 한 칸이라도 범위 밖이면 4명·7일 비축(읽기 규칙은 kit.ts readKitCalc, kit.test.ts)
-//   - 결과: #calc 안 aria-live="polite" 요소 하나. 값을 넣기 전부터 DOM 에 있고(잘못된 값일 때도 남는다),
+//   - 결과: #calc 안 첫 aria-live="polite" 요소(그 뒤 장보기 영역의 복사 안내도 aria-live, #107). 값을 넣기 전부터 DOM 에 있고(잘못된 값일 때도 남는다),
 //     입력(숫자 칸·−/+·기간)과 계산 기준 글자는 품지 않는다. 바른 값이면 그 안에 보이는 글자로
 //     합계 "물 84L(약 84kg) · 식량 84끼"(공백·기호 그대로, 숫자 사이를 다른 요소로 나눠도 글자는 이대로), 1인당 "1인당"과 "물 21L · 21끼".
 //     1인당 줄은 기간과 관계없이 "물 {L}L · {끼}끼" 꼴 그대로(무게를 넣지 않는다)
@@ -194,7 +194,7 @@ async function expectProgress(list: Locator, done: number, total: number, label:
 
 const peopleOf = (calc: Locator) => calc.getByRole("spinbutton", { name: PEOPLE, exact: true });
 const periodsOf = (calc: Locator) => calc.getByRole("radiogroup", { name: PERIOD, exact: true });
-const liveOf = (calc: Locator) => calc.locator('[aria-live="polite"]');
+const liveOf = (calc: Locator) => calc.locator('[aria-live="polite"]').first(); // 결과. 장보기 복사 안내(#107)는 그 뒤
 
 /** 기간을 고르고 가구원 수를 넣는다(가구원 수가 마지막 입력) */
 async function calculate(calc: Locator, c: Pick<Case, "people" | "period">) {
