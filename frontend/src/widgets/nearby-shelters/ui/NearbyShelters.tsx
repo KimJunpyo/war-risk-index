@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { mapUrl, regionPath, sheltersPath, useShelterRegions, useShelters } from "@/entities/shelter";
 import { StatusText } from "@/shared/ui";
@@ -20,11 +21,18 @@ const PAGER_BUTTON = `${BUTTON} aria-disabled:cursor-default aria-disabled:opaci
 // scroll-mt: 쪽을 바꿔 목록 맨 위로 스크롤할 때 위 여백(스크롤 위치 반올림으로 첫 카드 윗변이 잘리지 않게)
 const CARD_GRID = "grid scroll-mt-2 grid-cols-1 gap-2 @[40rem]:grid-cols-2";
 const PUBLIC_KIND = "공공용시설"; // 대부분이 이 값이라 배지를 달지 않는 시설 구분
+const ANCHOR_ID = "shelters"; // 바로가기 주소 /#shelters
+
+// 바로가기를 마친 내비게이션의 useRouter().bfcacheId(앱 안 링크로 올 때마다 바뀐다). 내비게이션마다 한 번만:
+// 다른 나라를 골랐다 한국으로 돌아와 영역을 다시 그려도 움직이지 않고, 앱 안 링크로 다시 오면 다시 한다
+// shortcut: 마지막 id 하나만 기억해, 뒤로·앞으로 가기에서 예전 id 가 되살아나면 다시 함, 그런 일이 보이면 처리한 id 를 Set 으로 모은다
+let anchoredId: string | null = null;
 
 /** 내 주변 민방위 대피소(국내). 위치는 버튼을 눌렀을 때만 요청하고, 거부·실패하면 지역 선택으로 찾는다.
  *  좌표는 상태에도 남기지 않고 반올림한 요청 경로만 들고 있는다. 대피소 데이터가 없으면(available false) 렌더링하지 않음.
  *  지역 목록 로딩·오류 중에도 위치 찾기는 쓸 수 있다(지역 선택만 숨김). */
 export function NearbyShelters() {
+  const { bfcacheId } = useRouter();
   const regions = useShelterRegions();
   const [query, setQuery] = useState<{ path: string; nearby: boolean } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -38,7 +46,18 @@ export function NearbyShelters() {
   // 마지막 조회 의도의 순번. 늦게 온 위치 콜백이 그 뒤의 지역 선택을 덮어쓰지 않게 한다.
   const seq = useRef(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const findRef = useRef<HTMLButtonElement>(null);
   const result = useShelters(query?.path ?? null);
+
+  // 바로가기(/#shelters): 영역을 화면 위로 올리고 찾기 버튼에 포커스만 준다. 위치는 버튼을 눌러야 묻는다(plan.md Q10).
+  // 그리기 전(layout effect)에 옮겨 홈 맨 위가 한 번 보였다가 튀지 않게. 영역을 실제로 그렸을 때만 마친 것으로 친다
+  useLayoutEffect(() => {
+    if (anchoredId === bfcacheId || location.hash !== `#${ANCHOR_ID}` || !sectionRef.current) return;
+    anchoredId = bfcacheId;
+    sectionRef.current.scrollIntoView({ block: "start" });
+    findRef.current?.focus({ preventScroll: true });
+  }, [bfcacheId]);
 
   if (regions.data?.available === false || result.data?.available === false) return null;
 
@@ -106,11 +125,12 @@ export function NearbyShelters() {
     listRef.current?.scrollIntoView({ block: "start" });
   };
 
+  // scroll-mt-4: 부모 animate-fade-up 이 8px 아래에서 올라와, 그리자마자 맨 위에 맞추면 끝난 뒤 윗변이 화면 위로 8px 나감
   return (
-    <section aria-labelledby="nearby-shelters-title" className="@container w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-neutral-400">
+    <section ref={sectionRef} id={ANCHOR_ID} aria-labelledby="nearby-shelters-title" className="@container w-full scroll-mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-neutral-400">
       <h3 id="nearby-shelters-title" className="mb-2 text-sm font-semibold text-neutral-200">내 주변 대피소</h3>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={findNearby} disabled={locating} className={BUTTON}>
+        <button ref={findRef} type="button" onClick={findNearby} disabled={locating} className={BUTTON}>
           {locating ? "위치 확인 중…" : "내 주변 대피소 찾기"}
         </button>
         <button type="button" onClick={() => setRegionOpen(true)} className={BUTTON}>지역으로 찾기</button>
