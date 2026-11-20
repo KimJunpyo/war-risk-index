@@ -11,17 +11,22 @@ import { GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, ST
 // 화면 선택자 계약 (구현은 이 계약을 따른다. #74 emergency.spec.ts 계약 위에 더한다)
 // - 목차(접근 이름 "목차"인 navigation): 경보 링크 5개 뒤에 href="#kit"(글자 "비상 가방")·href="#calc"(글자 "물·식량 계산") 링크가
 //   이 순서로 하나씩. 누르면 주소에 #kit·#calc 가 붙고 그 영역이 화면 안
-// - 가방 영역: id="kit" 요소 하나
+// - 가방 영역: id="kit" 요소 하나 (이슈 #105 에서 체크박스 목록 → 아이콘 타일로 바뀜)
 //   - 목록 둘: 제목 heading 이 정확히 "들고 나가는 3일 가방(1인 1개)"(GO_BAG_ITEMS)·"집에 두는 7일 비축"(STOCK_ITEMS).
-//     목록 = 제목에서 체크박스를 품은 가장 가까운 조상이고, 상대 목록의 체크박스는 품지 않는다
-//   - 항목: label 이 input[type=checkbox] 와 글자 span(item.text 그대로)을 직속 자식으로 감싼다(홈 ActionGuide 와 같은 꼴,
-//     contrast.spec.ts 선택자 label:has(input[type="checkbox"]:checked) > span). 체크박스는 네이티브 그대로 보이고,
-//     접근 이름은 item.text, 순서는 모델 순서
-//   - 체크 저장: localStorage KIT_STORAGE_KEY 에 체크한 item.id 의 JSON 배열(checklist.ts readChecked·toggleChecked 형식).
-//     CHECKLIST_STORAGE_KEY 는 건드리지 않는다. 저장값은 마운트 뒤에 읽는다(하이드레이션 불일치 없음)
+//     목록 = 제목에서 타일(button[aria-pressed])을 품은 가장 가까운 조상이고, 상대 목록의 타일은 품지 않는다
+//   - 타일: 항목마다 button[aria-pressed] 하나, 모델 순서, 접근 이름 = item.text 그대로. #kit 안 체크박스(input·role=checkbox) 0개.
+//     안에 svg[aria-hidden="true"] 항목 아이콘. 보이는 svg 는 안 담으면 1개, 담으면 체크 아이콘이 더해져 2개
+//     (숨길 때는 그리지 않거나 display:none·visibility:hidden. opacity 0 은 보이는 것으로 친다)
+//   - 진행: 목록 안에 글자 "{담은 수}/{전체} 챙김"과 진행 막대(progressbar 역할) 하나. 막대 값은 progress 의 value·max 또는
+//     aria-valuenow·aria-valuemax 가 담은 수·전체이고, 접근 이름이 있다. 누르면 1초 안에 aria-pressed·글자·막대가 바뀐다
+//   - 키보드: Tab 으로 타일에 모델 순서대로 닿고 Space·Enter 로 담고 뺀다. Tab 으로 오면 포커스 표시(outline 또는 box-shadow)가 생긴다
+//   - 담기 저장: localStorage KIT_STORAGE_KEY 에 담은 item.id 의 JSON 배열(checklist.ts readChecked·toggleChecked 형식).
+//     개편 전 저장값도 그대로 담긴 상태로 보인다. CHECKLIST_STORAGE_KEY 는 건드리지 않는다.
+//     저장값은 하이드레이션 뒤에 반영한다(하이드레이션 불일치 없음)
 //   - "이 브라우저에만 저장" 글자가 보인다
-//   - 출처: 마지막 체크박스 뒤에 KIT_SOURCES 마다 a[href=url](target="_blank", rel 에 noreferrer), 이름(name)·확인일(checkedAt 그대로)
-//   - 배치: md(768) 미만은 두 목록 위아래(3일 가방 위), md 이상은 2열(3일 가방 왼쪽)
+//   - 출처: 마지막 타일 뒤에 항목(sources)이 가리키는 KIT_SOURCES 마다 a[href=url](target="_blank", rel 에 noreferrer),
+//     이름(name)·확인일(checkedAt 그대로). 항목이 가리키지 않는 바깥 링크(1-3 농림수산성 등)는 #kit 안에 없다
+//   - 배치: 모든 폭에서 두 목록 위아래(3일 가방 위). 타일 높이 64px 이상, 목록 안 열 수 360 2열·768 3열·1080 4열·1440 4열
 // - 계산기 영역: id="calc" 요소 하나
 //   - 가구원 수(#106): [줄이기] [숫자 칸] [늘리기]가 이 순서로 한 줄. 숫자 칸은 남긴다(plan.md Q8, 직접 입력도 된다)
 //     - 숫자 칸: 접근 이름이 정확히 "가구원 수"인 input[type=number](spinbutton), min="1"·max="20"(MAX_PEOPLE)
@@ -69,6 +74,10 @@ const LISTS = [
   { title: "들고 나가는 3일 가방(1인 1개)", items: GO_BAG_ITEMS },
   { title: "집에 두는 7일 비축", items: STOCK_ITEMS },
 ];
+const TILE_COLUMNS: Record<number, number> = { 360: 2, 768: 3, 1080: 4, 1440: 4 }; // 폭별 목록 안 타일 열 수(plan.md 7-7)
+const TILE_MIN_HEIGHT = 64; // 타일 높이 하한(plan.md 7-8)
+const LEGACY_KIT = '["bag-medicine","stock-water"]'; // 개편 전 체크박스로 저장해 둔 값(인수 조건). 두 목록에서 하나씩
+const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
 const SAVE_NOTE = "이 브라우저에만 저장";
 const PEOPLE = "가구원 수";
 const PERIOD = "기간";
@@ -147,10 +156,42 @@ async function tabTo(page: Page, target: Locator) {
 
 const kitOf = (page: Page) => page.locator(KIT);
 const calcOf = (page: Page) => page.locator(CALC);
-/** 목록: 제목(heading)에서 체크박스를 품은 가장 가까운 조상 */
+/** 목록: 제목(heading)에서 타일(button[aria-pressed])을 품은 가장 가까운 조상 */
 const listOf = (kit: Locator, title: string) =>
-  kit.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::*[.//input[@type='checkbox']][1]");
-const checkboxOf = (scope: Locator, text: string) => scope.getByRole("checkbox", { name: text, exact: true });
+  kit.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::*[.//button[@aria-pressed]][1]");
+const tilesOf = (scope: Locator) => scope.locator("button[aria-pressed]");
+const tileOf = (scope: Locator, text: string) => scope.getByRole("button", { name: text, exact: true });
+/** 타일 안 보이는 svg: 항목 아이콘, 담으면 체크 아이콘까지 */
+const shownSvgs = (tile: Locator) => tile.locator("svg").filter({ visible: true });
+/** 진행 막대 값: progress 는 value·max, role="progressbar" 는 aria-valuenow·aria-valuemax */
+const barValue = (bar: Locator) => bar.evaluate((el) => el instanceof HTMLProgressElement
+  ? { now: el.value, max: el.max }
+  : { now: Number(el.getAttribute("aria-valuenow")), max: Number(el.getAttribute("aria-valuemax")) });
+/** 포커스 표시 재료: 보이는 outline 인지, box-shadow(Tailwind ring)가 있는지, 둘의 계산값 */
+const focusLook = (l: Locator) => l.evaluate((el, transparent) => {
+  const s = getComputedStyle(el);
+  return {
+    outline: s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && !new RegExp(transparent).test(s.outlineColor),
+    ring: s.boxShadow !== "none",
+    key: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.boxShadow}`,
+  };
+}, TRANSPARENT.source);
+
+/** 타일을 누르고 aria-pressed 가 pressed 가 되기를 1초까지 기다린다(체크박스 check()·uncheck() 처럼 전제로 쓴다). 타일이 없으면 바로 멈춘다 */
+async function toggleTile(tile: Locator, pressed: boolean, label: string) {
+  await expect(tile, `${label} 타일`).toHaveCount(1);
+  await tile.click();
+  await expect(tile, `${label} aria-pressed="${pressed}"`).toHaveAttribute("aria-pressed", String(pressed), { timeout: RESULT_TIMEOUT_MS });
+}
+
+/** 목록 진행: 진행 막대 하나, 글자 "{done}/{total} 챙김", 막대 값 done·최댓값 total. timeout 을 주면 그 시간 안에 */
+async function expectProgress(list: Locator, done: number, total: number, label: string, timeout?: number) {
+  const bar = list.getByRole("progressbar");
+  await expect(bar, `${label}: 진행 막대 하나`).toHaveCount(1);
+  await expect.soft(list, `${label}: 진행 글자`).toContainText(`${done}/${total} 챙김`, { timeout });
+  await expect.soft.poll(() => barValue(bar), { message: `${label}: 진행 막대 값·최댓값`, timeout }).toEqual({ now: done, max: total });
+}
+
 const peopleOf = (calc: Locator) => calc.getByRole("spinbutton", { name: PEOPLE, exact: true });
 const periodsOf = (calc: Locator) => calc.getByRole("radiogroup", { name: PERIOD, exact: true });
 const liveOf = (calc: Locator) => calc.locator('[aria-live="polite"]').first(); // 결과. 장보기 복사 안내(#107)는 그 뒤
@@ -173,7 +214,7 @@ async function expectResult(calc: Locator, c: Case, timeout?: number) {
 // 내용 단언은 expect.soft 라 한 번 실행으로 어긋난 조건을 모두 보여 준다(요소가 있는지 같은 전제만 바로 멈춤)
 test.describe.configure({ timeout: TEST_TIMEOUT_MS });
 
-test("목차·가방 영역: 경보 뒤 비상 가방·물·식량 계산 링크, 두 목록(제목·모델 순서·글자·label 꼴), 저장 안내, 끝에 출처 새 탭·확인일", async ({ page }) => {
+test("목차·가방 영역: 경보 뒤 비상 가방·물·식량 계산 링크, 두 목록(제목·타일 모델 순서·접근 이름·아이콘, 체크박스 없음), 저장 안내, 끝에 항목 출처만 새 탭·확인일", async ({ page }) => {
   await open(page);
   const toc = page.getByRole("navigation", { name: TOC_NAME, exact: true });
   await expect(toc, "목차").toBeVisible();
@@ -191,20 +232,26 @@ test("목차·가방 영역: 경보 뒤 비상 가방·물·식량 계산 링크
 
   const kit = kitOf(page);
   await expect(kit, "가방 영역(id=kit) 하나").toHaveCount(1);
+  await expect.soft(kit.locator('input[type="checkbox"], [role="checkbox"]'), "#kit 안 체크박스").toHaveCount(0);
   for (const { title, items } of LISTS) {
     const list = listOf(kit, title);
     await expect(list, `목록 "${title}"`).toHaveCount(1);
-    await expect.soft(list.getByRole("checkbox"), `${title}: 체크박스 수(상대 목록을 품지 않음)`).toHaveCount(items.length);
-    await expect.soft(list.locator('label > input[type="checkbox"]'), `${title}: label 이 체크박스를 직접 감쌈`).toHaveCount(items.length);
-    await expect.soft(list.locator("label > span"), `${title}: label 글자 span(모델 순서·글자)`).toHaveText(items.map((it) => it.text));
-    for (const it of items) {
-      await expect.soft(checkboxOf(list, it.text), `${it.id}: 접근 이름 = 항목 글자`).toHaveCount(1);
-      await expect.soft(checkboxOf(list, it.text), `${it.id}: 처음엔 체크 안 됨`).not.toBeChecked();
+    const tiles = tilesOf(list);
+    await expect(tiles, `${title}: 타일 수(상대 목록을 품지 않음)`).toHaveCount(items.length);
+    for (const [i, it] of items.entries()) {
+      const tile = tiles.nth(i);
+      await expect.soft(tile, `${it.id}: ${i + 1}번째 타일 접근 이름 = 항목 글자(모델 순서)`).toHaveAccessibleName(it.text);
+      await expect.soft(tile, `${it.id}: 처음엔 안 담김`).toHaveAttribute("aria-pressed", "false");
+      await expect.soft(tile.locator('svg[aria-hidden="true"]'), `${it.id}: aria-hidden 아이콘`).not.toHaveCount(0);
+      await expect.soft(shownSvgs(tile), `${it.id}: 안 담은 타일은 보이는 svg 1개(체크 아이콘 없음)`).toHaveCount(1);
     }
   }
   await expect.soft(kit.getByText(SAVE_NOTE).first(), "저장 안내").toBeVisible();
 
-  for (const [key, s] of Object.entries(KIT_SOURCES)) {
+  // 출처: 항목(sources)이 가리키는 것만
+  const keys = [...new Set(LISTS.flatMap(({ items }) => items.flatMap((it) => it.sources)))];
+  for (const key of keys) {
+    const s = KIT_SOURCES[key];
     const links = kit.locator(`a[href="${s.url}"]`);
     await expect.soft(links, `출처 ${key} 링크`).not.toHaveCount(0);
     for (const a of await links.all()) {
@@ -214,14 +261,62 @@ test("목차·가방 영역: 경보 뒤 비상 가방·물·식량 계산 링크
     await expect.soft(kit, `출처 ${key} 이름`).toContainText(s.name, { useInnerText: true });
     await expect.soft(kit, `출처 ${key} 확인일`).toContainText(s.checkedAt);
   }
-  // 영역 끝: 출처 링크는 모두 마지막 체크박스 뒤(문서 순서)
+  const urls = keys.map((k) => KIT_SOURCES[k].url);
+  // 영역 끝: 출처 링크는 모두 마지막 타일 뒤(문서 순서)
   const early = await kit.evaluate((el, urls) => {
-    const boxes = el.querySelectorAll('input[type="checkbox"]');
-    const last = boxes[boxes.length - 1];
+    const tiles = el.querySelectorAll("button[aria-pressed]");
+    const last = tiles[tiles.length - 1];
     return urls.filter((u) => [...el.querySelectorAll(`a[href="${u}"]`)]
       .some((a) => !last || !(last.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)));
-  }, Object.values(KIT_SOURCES).map((s) => s.url));
-  expect.soft(early, "마지막 체크박스보다 앞에 있는 출처 링크").toEqual([]);
+  }, urls);
+  expect.soft(early, "마지막 타일보다 앞에 있는 출처 링크").toEqual([]);
+  // KIT_SOURCES 에 있어도 항목이 가리키지 않는 출처(1-3 장보기 환산 근거)는 여기 두지 않는다
+  const others = await kit.evaluate((el, urls) => [...el.querySelectorAll("a[href]")]
+    .map((a) => a.getAttribute("href") ?? "").filter((h) => /^https?:/.test(h) && !urls.includes(h)), urls);
+  expect.soft(others, "항목이 가리키지 않는 바깥 링크(1-3 농림수산성 등)").toEqual([]);
+});
+
+test("타일 누르기: 1초 안에 aria-pressed=true·진행 1/7(1/8) 챙김·막대 값 1, 체크 아이콘이 보임, 다시 누르면 false·0", async ({ page }) => {
+  await open(page);
+  const kit = kitOf(page);
+  for (const { title, items } of LISTS) {
+    const list = listOf(kit, title);
+    await expect(list, `목록 "${title}"`).toHaveCount(1);
+    const [tile, other] = [tilesOf(list).first(), tilesOf(list).nth(1)];
+    await expectProgress(list, 0, items.length, `${title} 처음`);
+    await expect.soft(list.getByRole("progressbar"), `${title}: 진행 막대 접근 이름`).toHaveAccessibleName(/\S/);
+
+    await tile.click();
+    await expect.soft(tile, `${title} 첫 타일 누름: aria-pressed`).toHaveAttribute("aria-pressed", "true", { timeout: RESULT_TIMEOUT_MS });
+    await expectProgress(list, 1, items.length, `${title} 첫 타일 누름`, RESULT_TIMEOUT_MS);
+    await expect.soft(shownSvgs(tile), `${title} 담은 타일: 항목 아이콘 + 체크 아이콘`).toHaveCount(2);
+    await expect.soft(tile.locator('svg:not([aria-hidden="true"])'), `${title} 담은 타일: 체크 아이콘도 aria-hidden`).toHaveCount(0);
+    await expect.soft(shownSvgs(other), `${title} 안 담은 이웃 타일: 체크 아이콘 없음`).toHaveCount(1);
+
+    await tile.click();
+    await expect.soft(tile, `${title} 다시 누름: aria-pressed`).toHaveAttribute("aria-pressed", "false", { timeout: RESULT_TIMEOUT_MS });
+    await expectProgress(list, 0, items.length, `${title} 다시 누름`, RESULT_TIMEOUT_MS);
+    await expect.soft(shownSvgs(tile), `${title} 뺀 타일: 체크 아이콘 사라짐`).toHaveCount(1);
+  }
+});
+
+test(`기존 저장값 호환: ${KIT_STORAGE_KEY} 에 ${LEGACY_KIT} 가 있으면 두 타일 담김·진행 1/7·1/8 챙김, 하이드레이션 오류 없음`, async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KIT_STORAGE_KEY, LEGACY_KIT]);
+  await page.reload({ waitUntil: "networkidle" });
+  const saved = readChecked(LEGACY_KIT);
+  const kit = kitOf(page);
+  for (const { title, items } of LISTS) {
+    const list = listOf(kit, title);
+    await expect(list, `목록 "${title}"`).toHaveCount(1);
+    for (const it of items) {
+      const pressed = String(saved.includes(it.id));
+      await expect.soft(tileOf(list, it.text), `${it.id}: aria-pressed="${pressed}"`).toHaveAttribute("aria-pressed", pressed);
+    }
+    await expectProgress(list, items.filter((it) => saved.includes(it.id)).length, items.length, title);
+  }
+  expect.soft(errors, "콘솔 오류(하이드레이션 포함)").toEqual([]);
 });
 
 test("계산기: 가구원 수(spinbutton, min 1·max 20)·기간 radiogroup(KIT_PERIODS)·aria-live=polite 결과 영역·계산 기준과 출처", async ({ page }) => {
@@ -297,40 +392,40 @@ test("계산: 가구원 수 0·21·1.5·빈칸이면 안내 문구, live 영역�
   expect.soft(errors, "콘솔 오류(NaN 값 경고 등)").toEqual([]);
 });
 
-test("체크 저장: 새로 고쳐도 남음, war-risk:kit:v1 을 지우면 모두 풀림, war-risk:checklist:v1 은 그대로", async ({ page }) => {
+test("담기 저장: 새로 고쳐도 남음, war-risk:kit:v1 을 지우면 모두 풀림, war-risk:checklist:v1 은 그대로", async ({ page }) => {
   await open(page);
   // 홈 체크리스트에 체크해 둔 상태에서 시작한다
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [CHECKLIST_STORAGE_KEY, CHECKLIST_SEED]);
   await page.reload({ waitUntil: "networkidle" });
   const kit = kitOf(page);
-  const checked = kit.locator('input[type="checkbox"]:checked');
-  await expect(checked, "처음에는 체크 없음").toHaveCount(0);
+  const pressed = kit.locator('button[aria-pressed="true"]');
+  await expect(pressed, "처음에는 담은 타일 없음").toHaveCount(0);
 
   const picked = [GO_BAG_ITEMS[0], STOCK_ITEMS[STOCK_ITEMS.length - 1]]; // 두 목록에서 하나씩
-  for (const it of picked) await checkboxOf(kit, it.text).check();
-  await expect.soft.poll(() => storedKitIds(page), `${KIT_STORAGE_KEY}: 체크한 id 의 JSON 배열`)
+  for (const it of picked) await toggleTile(tileOf(kit, it.text), true, it.id);
+  await expect.soft.poll(() => storedKitIds(page), `${KIT_STORAGE_KEY}: 담은 id 의 JSON 배열`)
     .toEqual(picked.map((it) => it.id).sort());
-  expect.soft(await storedValue(page, CHECKLIST_STORAGE_KEY), `체크 뒤 ${CHECKLIST_STORAGE_KEY} 그대로`).toBe(CHECKLIST_SEED);
+  expect.soft(await storedValue(page, CHECKLIST_STORAGE_KEY), `담은 뒤 ${CHECKLIST_STORAGE_KEY} 그대로`).toBe(CHECKLIST_SEED);
 
   await page.reload({ waitUntil: "networkidle" });
-  for (const it of picked) await expect(checkboxOf(kit, it.text), `새로 고친 뒤 ${it.id} 체크 남음`).toBeChecked();
-  await expect.soft(checked, "새로 고친 뒤 체크 수").toHaveCount(picked.length);
+  for (const it of picked) await expect(tileOf(kit, it.text), `새로 고친 뒤 ${it.id} 담김 남음`).toHaveAttribute("aria-pressed", "true");
+  await expect.soft(pressed, "새로 고친 뒤 담은 수").toHaveCount(picked.length);
 
   await page.evaluate((k) => localStorage.removeItem(k), KIT_STORAGE_KEY);
   await page.reload({ waitUntil: "networkidle" });
-  await expect(checked, `${KIT_STORAGE_KEY} 를 지우고 새로 고치면 모두 풀림`).toHaveCount(0);
+  await expect(pressed, `${KIT_STORAGE_KEY} 를 지우고 새로 고치면 모두 풀림`).toHaveCount(0);
   expect(await storedValue(page, CHECKLIST_STORAGE_KEY), `${CHECKLIST_STORAGE_KEY} 그대로`).toBe(CHECKLIST_SEED);
 });
 
-test("체크·계산하는 동안 네트워크 요청 0건", async ({ page }) => {
+test("담기·계산하는 동안 네트워크 요청 0건", async ({ page }) => {
   await open(page);
   const requests: string[] = [];
   page.on("request", (r) => {
     if (!DEV_ONLY.test(r.url())) requests.push(`${r.method()} ${r.url()}`);
   });
   const kit = kitOf(page);
-  for (const { title } of LISTS) await listOf(kit, title).getByRole("checkbox").first().check();
-  await listOf(kit, LISTS[0].title).getByRole("checkbox").first().uncheck();
+  for (const { title } of LISTS) await toggleTile(tilesOf(listOf(kit, title)).first(), true, `${title} 첫`);
+  await toggleTile(tilesOf(listOf(kit, LISTS[0].title)).first(), false, `${LISTS[0].title} 첫`);
   const calc = calcOf(page);
   for (const c of [FOUR_WEEK, ONE_BAG]) {
     await calculate(calc, c);
@@ -340,24 +435,32 @@ test("체크·계산하는 동안 네트워크 요청 0건", async ({ page }) =>
   await expect(calc.getByText(INVALID).first()).toBeVisible();
   // 기다릴 사건이 없어(요청이 없어야 정상) 시간으로 기다린다
   await page.waitForTimeout(LATE_REQUEST_MS);
-  expect(requests, "체크·계산 중 보낸 요청").toEqual([]);
+  expect(requests, "담기·계산 중 보낸 요청").toEqual([]);
 });
 
-test("키보드: Tab 으로 두 목록의 체크박스를 차례로 옮겨 다니며 Space 로 체크, 다시 Space 로 해제", async ({ page }) => {
+test("키보드: Tab 으로 두 목록의 타일을 모델 순서로 옮겨 다니며 포커스 표시, Space 로 담기, Enter·Space 로 빼고 담기", async ({ page }) => {
   await open(page);
-  const boxes = kitOf(page).getByRole("checkbox");
+  const tiles = tilesOf(kitOf(page));
   const items = [...GO_BAG_ITEMS, ...STOCK_ITEMS];
-  await expect(boxes, "체크박스 수 = 두 목록 항목 수").toHaveCount(items.length);
-  await boxes.first().focus();
+  await expect(tiles, "타일 수 = 두 목록 항목 수").toHaveCount(items.length);
+  await tiles.first().focus();
+  const unmarked: string[] = [];
   for (const [i, it] of items.entries()) {
-    const checkbox = boxes.nth(i);
-    expect(await tabTo(page, checkbox), `Tab 으로 ${it.id}`).toBe(true);
+    const tile = tiles.nth(i);
+    const before = await focusLook(tile);
+    expect(await tabTo(page, tile), `Tab 으로 ${it.id}`).toBe(true);
+    const after = await focusLook(tile);
+    // 첫 타일은 focus() 로 옮겼으므로 Tab 으로 온 타일만 본다. 포커스 전과 달라지고 outline 이나 box-shadow 가 보여야 한다
+    if (i > 0 && !(after.key !== before.key && (after.outline || after.ring))) unmarked.push(it.id);
     await page.keyboard.press("Space");
-    await expect.soft(checkbox, `Space 로 ${it.id} 체크`).toBeChecked();
+    await expect.soft(tile, `Space 로 ${it.id} 담기`).toHaveAttribute("aria-pressed", "true");
   }
-  await expect.soft.poll(() => storedKitIds(page), "모두 체크한 뒤 저장값").toEqual(items.map((it) => it.id).sort());
-  await page.keyboard.press("Space");
-  await expect.soft(boxes.last(), "Space 로 다시 해제").not.toBeChecked();
+  expect.soft(unmarked, "Tab 으로 왔는데 포커스 표시(outline 또는 box-shadow)가 생기지 않은 타일").toEqual([]);
+  await expect.soft.poll(() => storedKitIds(page), "모두 담은 뒤 저장값").toEqual(items.map((it) => it.id).sort());
+  for (const [key, pressed] of [["Enter", "false"], ["Enter", "true"], ["Space", "false"]]) {
+    await page.keyboard.press(key);
+    await expect.soft(tiles.last(), `마지막 타일에서 ${key} → aria-pressed="${pressed}"`).toHaveAttribute("aria-pressed", pressed);
+  }
 });
 
 test("홈 체크리스트 카드(ActionGuide)에 /emergency#kit 링크 하나, 누르면 같은 탭에서 가방 영역", async ({ page }) => {
@@ -376,20 +479,21 @@ test("홈 체크리스트 카드(ActionGuide)에 /emergency#kit 링크 하나, �
 
 for (const width of WIDTHS) {
   const wide = width >= MD;
-  test(`${width}px: 체크·계산 상태에서 가로 넘침 없음·콘솔 오류 0건, 두 목록 ${wide ? "2열" : "위아래"}, 계산기 입력과 결과 ${wide ? "한 줄" : "위아래"}`, async ({ page }, info) => {
+  test(`${width}px: 담기·계산 상태에서 가로 넘침 없음·콘솔 오류 0건, 두 목록 위아래·타일 ${TILE_COLUMNS[width]}열·높이 ${TILE_MIN_HEIGHT}px 이상, 계산기 입력과 결과 ${wide ? "한 줄" : "위아래"}`, async ({ page }, info) => {
     const errors = trackErrors(page);
     await open(page, width);
     const kit = kitOf(page);
     const calc = calcOf(page);
-    for (const { title } of LISTS) await listOf(kit, title).getByRole("checkbox").first().check();
+    for (const { title } of LISTS) await toggleTile(tilesOf(listOf(kit, title)).first(), true, `${title} 첫`);
     await settle(page);
-    await expectNoOverflow(page, "체크");
+    await expectNoOverflow(page, "담기");
     const [bag, stock] = await Promise.all(LISTS.map(({ title }) => box(listOf(kit, title))));
-    if (wide) {
-      expect.soft(sameLine(bag, stock), "두 목록이 한 줄(2열)").toBe(true);
-      expect.soft(stock.x, "7일 비축이 3일 가방 오른쪽").toBeGreaterThanOrEqual(bag.right - TOLERANCE_PX);
-    } else {
-      expect.soft(stock.y, "7일 비축이 3일 가방 아래").toBeGreaterThanOrEqual(bag.bottom - TOLERANCE_PX);
+    expect.soft(stock.y, "7일 비축이 3일 가방 아래").toBeGreaterThanOrEqual(bag.bottom - TOLERANCE_PX);
+    for (const { title } of LISTS) {
+      const tiles = await Promise.all((await tilesOf(listOf(kit, title)).all()).map(box));
+      // 열 수 = 첫 타일과 같은 줄(세로 범위가 겹침)에 놓인 타일 수
+      expect.soft(tiles.filter((t) => sameLine(t, tiles[0])).length, `${title}: 타일 열 수`).toBe(TILE_COLUMNS[width]);
+      expect.soft(tiles.map((t) => t.height).filter((h) => h < TILE_MIN_HEIGHT), `${title}: 높이 ${TILE_MIN_HEIGHT}px 미만 타일`).toEqual([]);
     }
 
     for (const c of [MAX_TWO_WEEKS, MAX_BAG]) {
@@ -429,7 +533,7 @@ const INC = "가구원 수 늘리기";
 const TARGET_MIN_PX = 44; // −/+ 버튼 가로·세로 최소(plan.md 7-8)
 const CHIP_MIN_PX = 40; // 기간 칩 높이 최소
 const LATE_SAVE_MS = 1_000; // 잘못된 값이 늦게(디바운스) 저장되지 않는지 볼 때 기다리는 시간
-const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
+const CALC_TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
 const WEEK_PER_PERSON = 21; // 1인 7일 물 21L·21끼
 /** n명·7일 비축 결과 글자 */
 const week = (n: number): Case => ({
@@ -479,7 +583,7 @@ const focusRingShown = (page: Page) => page.evaluate((transparent) => {
   const s = getComputedStyle(el);
   const outline = s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && !new RegExp(transparent).test(s.outlineColor);
   return outline || s.boxShadow !== "none";
-}, TRANSPARENT.source);
+}, CALC_TRANSPARENT.source);
 
 test("−/+ 버튼: #calc 안 가구원 수 줄이기·늘리기 하나씩, 그 사이에 spinbutton 가구원 수, 아이콘 svg 는 aria-hidden, live 영역 밖", async ({ page }) => {
   await open(page);

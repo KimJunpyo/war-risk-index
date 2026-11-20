@@ -160,20 +160,25 @@ const CHECK_ONE: State = { name: "체크리스트 항목 하나 체크", act: (p
 const hydrated = (page: Page) => page.waitForLoadState("networkidle");
 const calcOf = (page: Page) => page.locator("#calc");
 const peopleOf = (page: Page) => calcOf(page).getByRole("spinbutton", { name: "가구원 수", exact: true });
+// 이슈 #105 가방 타일: 담은 타일은 채운 바탕·체크 아이콘으로 강조한다(plan.md Q9). 그래서 "체크한 항목이 더 흐리다"
+// 위계 검사(CHECK_STATES)에서 이 상태를 뺐다(명세 변경). 홈 체크리스트 상태(CHECK_ONE)에는 남긴다
 const KIT_CHECK: State = {
-  name: "비상 대비 가방 체크",
+  name: "가방 타일 담음",
   path: "/emergency",
   act: async (page) => {
     await hydrated(page);
-    // 두 목록의 첫 항목. 목록 = 제목에서 체크박스를 품은 가장 가까운 조상(emergency-kit.spec.ts 계약)
+    // 두 목록의 첫 타일. 목록 = 제목에서 타일(button[aria-pressed])을 품은 가장 가까운 조상(emergency-kit.spec.ts 계약)
     for (const title of ["들고 나가는 3일 가방(1인 1개)", "집에 두는 7일 비축"]) {
-      await page.locator("#kit").getByRole("heading", { name: title, exact: true })
-        .locator("xpath=ancestor::*[.//input[@type='checkbox']][1]").getByRole("checkbox").first().check();
+      const tile = page.locator("#kit").getByRole("heading", { name: title, exact: true })
+        .locator("xpath=ancestor::*[.//button[@aria-pressed]][1]").locator("button[aria-pressed]").first();
+      await expect(tile, `${title} 첫 타일`).toHaveCount(1);
+      await tile.click();
+      await expect(tile, `${title} 첫 타일 담음`).toHaveAttribute("aria-pressed", "true");
     }
   },
 };
 // 체크한 항목·체크 안 한 항목 글자를 따로 재 위계를 보는 상태
-const CHECK_STATES = [CHECK_ONE, KIT_CHECK];
+const CHECK_STATES = [CHECK_ONE];
 
 const STATES: State[] = [
   HOME,
@@ -222,6 +227,19 @@ const STATES: State[] = [
         .locator("xpath=ancestor::*[.//a[starts-with(@href,'tel:')]][1]");
       await expect(embassy.locator("li").first(), "공관 목록이 있는 나라여야 재외공관 글자를 잴 수 있음")
         .toBeVisible({ timeout: DATA_TIMEOUT_MS });
+    },
+  },
+  // 경보 상세(이슈 #104 /emergency/[alert]): 정적 페이지라 데이터를 기다리지 않는다. 사이렌 표시·대피소 링크가 있는 공습경보를 기본으로 잰다.
+  // 접힌 "더 보기" 안쪽도 크기가 있어 기본 상태에서 이미 잰다. 펼친 화면은 행동요령이 가장 긴 핵경보로 한 번 더 잰다
+  { name: "경보 상세 기본(공습경보)", path: "/emergency/air-raid" },
+  {
+    name: "경보 상세 더 보기 펼침(핵경보)",
+    path: "/emergency/nuclear",
+    act: async (page) => {
+      await hydrated(page);
+      const details = page.locator("main details");
+      await details.locator("summary").click();
+      await expect(details).toHaveAttribute("open");
     },
   },
   { name: "비상 대비 페이지 기본", path: "/emergency" },
