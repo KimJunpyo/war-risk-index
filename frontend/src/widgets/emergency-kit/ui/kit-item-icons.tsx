@@ -2,7 +2,7 @@
  * 비상 가방 항목 아이콘 그림: Lucide(https://lucide.dev) 아이콘 droplet·pill·radio·id-card·contact·shirt·droplets·utensils·
  * flame·flashlight·briefcase-medical·bath·door-closed·calendar-check 와 담은 타일의 체크 표시 check 의
  * 도형(path·circle·rect)을 lucide 저장소 icons/<이름>.svg 원본에서 그대로 옮겼다.
- * 화생방 대비용품은 lucide 에 방독면 그림이 없어 화생방경보 아이콘(biohazard, entities/guide 의 ALERT_ICON)을 같이 쓴다.
+ * 화생방 대비용품(bag-cbr)의 방독면은 lucide 에 그림이 없어 같은 틀(24×24, 선 두께 2, 둥근 선 끝·이음)로 직접 그렸다(plan.md Q1).
  * Lucide 라이선스(ISC License) 고지:
  *
  * Copyright (c) 2026 Lucide Icons and Contributors
@@ -42,7 +42,6 @@
  * SOFTWARE.
  */
 import type { ReactNode } from "react";
-import { ALERT_ICON } from "@/entities/guide";
 
 /** 비상 가방 항목 id(GO_BAG_ITEMS·STOCK_ITEMS) → 아이콘 그림 함수. 틀은 shared/ui 의 Icon 으로 감싼다: <Icon className="h-5 w-5">{KIT_ITEM_ICON[id]()}</Icon>
  *  값을 함수로 두는 이유는 경보 아이콘(entities/guide/ui/alert-icons.tsx)과 같다. 항목을 더하면 여기에도 더한다(없으면 타일을 그리다 멈춤) */
@@ -84,7 +83,14 @@ export const KIT_ITEM_ICON: Record<string, () => ReactNode> = {
       <rect x="3" y="3" width="18" height="18" rx="2" />
     </>
   ),
-  "bag-cbr": ALERT_ICON.cbr, // biohazard
+  "bag-cbr": () => ( // 방독면(직접 그림): 둥근 틀, 두 눈, 턱의 원형 정화통
+    <>
+      <path d="M9.8 17.3C6.4 16.2 3 13.4 3 9.5a9 6.5 0 0 1 18 0c0 3.9-3.4 6.7-6.8 7.8" />
+      <circle cx="8" cy="10" r="2" />
+      <circle cx="16" cy="10" r="2" />
+      <circle cx="12" cy="18.5" r="2.5" />
+    </>
+  ),
   "bag-clothes-hygiene": () => ( // shirt
     <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
   ),
