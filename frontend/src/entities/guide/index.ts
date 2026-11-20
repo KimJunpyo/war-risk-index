@@ -1,4 +1,4 @@
-export { ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert } from "./model/alerts";
+export { ALERT_SOURCES, CIVIL_ALERTS, type CivilAlert, type KeyActionIcon } from "./model/alerts";
 export { ADVISORY_LEVELS, type AdvisoryName, bandFor, EXTREME, SCORE_BANDS, type ScoreBand } from "./model/guide";
 export { CHECKLIST_SOURCE, readChecked, toggleChecked } from "./model/checklist";
 export { FAQ } from "./model/faq";
