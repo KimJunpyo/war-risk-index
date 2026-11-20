@@ -5,3 +5,4 @@ export { FAQ } from "./model/faq";
 export { shoppingList, type ShoppingList, shoppingText, waterPacks } from "./model/shopping";
 export { GO_BAG_ITEMS, KIT_PERIODS, KIT_SOURCES, KIT_STORAGE_KEY, MAX_PEOPLE, MEALS_PER_PERSON_DAY, STOCK_ITEMS, supplies, WATER_L_PER_PERSON_DAY } from "./model/kit";
 export { ActionGuide } from "./ui/ActionGuide";
+export { ALERT_ICON } from "./ui/alert-icons";
