@@ -72,7 +72,7 @@ def test_fixed_files_exist(published: tuple[str, Path]) -> None:
     case, out_dir = published
     files = set(_files(out_dir))
     fixed = {"pairs.json", "countries.json", "cases.json", "blend.json", "live.json", "status.json",
-             "shelters/regions.json", "shelters/meta.json"}
+             "shelters/regions.json", "shelters/meta.json", "embassies.json"}
     assert fixed <= files
     for pid in publish.PAIRS:
         assert {f"pairs/{pid}/index.json", f"pairs/{pid}/catalysts.json"} <= files
@@ -167,6 +167,34 @@ def test_fixture_is_not_empty(published: tuple[str, Path]) -> None:
     jpn = _load(out_dir, "countries/JPN/embassies.json")
     assert jpn["as_of"] == (FIXTURE_COLLECTED if case == "key" else None)
     assert bool(jpn["embassies"]) == (case == "key")
+
+
+def test_embassies_bundle(published: tuple[str, Path], client: TestClient) -> None:
+    """#76 /api/embassies: 나라별 경로와 같은 공관, 지수 대상 밖 나라도 담는다. 키가 없으면 빈 목록과 영사콜센터."""
+    case, out_dir = published
+    res = client.get("/api/embassies")
+    assert res.status_code == 200
+    body = res.json()
+    assert _load(out_dir, "embassies.json") == body
+    if case == "no_key":
+        assert body == {"available": False, "as_of": None, "call_center": embassies.CALL_CENTER, "countries": []}
+        return
+    assert body["available"] is True and body["as_of"] == FIXTURE_COLLECTED
+    by_iso2 = {c["iso2"]: c["embassies"] for c in body["countries"]}
+    assert list(by_iso2) == sorted(by_iso2)
+    codes = [c["code"] for c in _load(out_dir, "countries.json")]
+    assert "NA" in by_iso2 and "NA" not in {main._iso2(code) for code in codes}  # 픽스처의 지수 대상 밖 나라
+    assert by_iso2["JP"] and by_iso2["UA"]  # 빈 목록끼리 같아서 통과하는 일이 없도록
+    for code in codes:
+        one = client.get(f"/api/countries/{code}/embassies").json()
+        assert by_iso2.get(main._iso2(code), []) == one["embassies"], code
+
+
+def test_write_refuses_to_drop_embassies_bundle(tmp_path: Path) -> None:
+    publish.write({"embassies.json": {"available": True, "countries": [{"iso2": "JP", "embassies": []}]}}, tmp_path)
+    with pytest.raises(RuntimeError, match="embassies.json"):
+        publish.write({"embassies.json": {"available": False, "countries": []}}, tmp_path)
+    assert _load(tmp_path, "embassies.json")["available"] is True
 
 
 def test_embassy_as_of_fallback_mtime(tmp_path: Path) -> None:

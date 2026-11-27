@@ -22,7 +22,7 @@ CODES = ["KOR", "PRK", "UKR", "RUS", "ISR", "IRN", "USA", "JPN"]
 INDEX_DAYS, CATALYST_DAYS = 60, 100  # 일별 지수·촉매를 남길 최근 일수
 # 대피소를 남길 구역 (위도, 경도, 위도 반폭, 경도 반폭): 서울 도심, 부산
 SHELTER_BOXES = [(37.57, 126.98, 0.06, 0.08), (35.18, 129.08, 0.06, 0.08)]
-EMBASSY_ISO2 = ["JP", "UA"]
+EMBASSY_ISO2 = ["JP", "UA", "NA"]  # NA(나미비아): 지수 대상이 아닌 나라, 코드가 결측값 글자와 같음
 COLLECTED = "2026-11-13"  # 공관 수집일 열 고정값
 
 

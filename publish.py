@@ -70,6 +70,7 @@ def build() -> dict[str, Any]:
         "cases.json": main.list_cases(),
         "blend.json": main.blend_weights(),
         "live.json": main.live_status(),
+        "embassies.json": main.list_embassies(),
         # Worker 가 요청 시각 기준으로 나이를 계산한다(/api/health 와 같은 원천)
         "status.json": dict(zip(("live_as_of", "index_date"), main.freshness())),
     }
