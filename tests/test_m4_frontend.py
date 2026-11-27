@@ -8,6 +8,9 @@
 - Advisory.source 에 "kr_mofa". ADVISORY_LEVELS 에 외교부 단계 이름(여행유의·여행자제·출국권고·여행금지).
 - 대피소: frontend/src/entities/shelter/ (index.ts, model/coords.ts), frontend/src/widgets/nearby-shelters/ (index.ts)
   좌표 쿼리(lat=)는 coords.ts 에서만 만든다. shelter 엔티티·위젯은 localStorage·sessionStorage·document.cookie 를 쓰지 않는다.
+  (이슈 #81 명세 변경, plan.md Q4 B) 지역 결과는 "이 기기에 저장"을 누를 때만 Cache Storage 에 남는다.
+  Cache Storage(caches)는 위젯의 model/saved.ts 에서만 쓰고, 그 캐시 이름(SAVED_CACHE)은 public/sw.js 의 SAVED 와 같으며
+  sw.js activate 가 지우지 않는다. 고정 문구 PRIVACY_NOTICE 는 이 동작에 맞춘 문구다.
   getCurrentPosition 시간 초과 10초. 고정 문구는 아래 상수 그대로.
 - 재외공관: frontend/src/widgets/embassy-contacts/ (index.ts), 전화는 tel: 링크.
 - HomePage 가 두 위젯을 쓰고, 푸터 위젯(frontend/src/widgets/site-footer/) 데이터 출처에 외교부·행정안전부.
@@ -40,7 +43,13 @@ MOFA_LEVELS = ["여행유의", "여행자제", "출국권고", "여행금지"]
 FIND_NEARBY = "내 주변 대피소 찾기"
 FIND_BY_REGION = "지역으로 찾기"
 LOCATION_FAILED = "위치를 쓸 수 없습니다. 지역으로 찾아 주세요."
-PRIVACY_NOTICE = "위치는 대피소 검색에만 쓰고 저장하지 않습니다. 약 1km 단위로 반올림해 보냅니다."
+# 이슈 #81 명세 변경: 지역 결과 저장이 생겨 "저장하지 않습니다"를 위치에만 한정하고 저장 조건을 적는다
+PRIVACY_NOTICE = "위치(내 주변 찾기)는 저장하지 않습니다. 지역 결과는 '이 기기에 저장'을 누를 때만 이 기기에 남습니다."
+ROUNDING_NOTICE = "위치는 약 1km 단위로 반올림해 보냅니다."
+SAVE_BUTTON = "이 기기에 저장"
+SAVED_MODEL = SHELTER_WIDGET / "model" / "saved.ts"
+SW = FRONTEND / "public" / "sw.js"
+CACHE_STORAGE = re.compile(r"\bcaches\.")
 STORAGE = re.compile(r"\b(localStorage|sessionStorage|document\.cookie)\b")
 
 
@@ -90,7 +99,7 @@ def test_coord_query_built_only_in_coords() -> None:
     assert offenders == []
 
 
-@pytest.mark.parametrize("text", [FIND_NEARBY, FIND_BY_REGION, LOCATION_FAILED, PRIVACY_NOTICE])
+@pytest.mark.parametrize("text", [FIND_NEARBY, FIND_BY_REGION, LOCATION_FAILED, PRIVACY_NOTICE, ROUNDING_NOTICE, SAVE_BUTTON])
 def test_shelter_fixed_texts(text: str) -> None:
     assert text in _dir_code(SHELTER_WIDGET)
 
@@ -105,6 +114,22 @@ def test_shelter_geolocation_timeout_and_map_link() -> None:
 def test_shelter_no_browser_storage() -> None:
     hits = STORAGE.findall(_dir_code(SHELTER_ENTITY) + _dir_code(SHELTER_WIDGET))
     assert hits == []
+
+
+def test_shelter_cache_storage_only_in_saved_model() -> None:
+    # 이슈 #81: 저장은 model/saved.ts 한 곳에서만(키에 지역 이름만 넣는 것은 saved.test.ts·e2e 가 본다)
+    files = [p for d in (SHELTER_ENTITY, SHELTER_WIDGET) for p in sorted(d.rglob("*.ts*")) if ".test." not in p.name]
+    offenders = [p.relative_to(SRC).as_posix() for p in files if p != SAVED_MODEL and CACHE_STORAGE.search(_code(p))]
+    assert offenders == []
+    assert CACHE_STORAGE.search(_code(SAVED_MODEL))
+
+
+def test_saved_cache_kept_by_service_worker() -> None:
+    # 저장 캐시 이름이 sw.js 의 SAVED 와 같고 activate 가 그 이름을 지우지 않는다(다음 버전 서비스 워커가 사용자 저장본을 지우지 않게)
+    m = re.search(r'SAVED_CACHE\s*=\s*"([^"]+)"', _code(SAVED_MODEL))
+    sw = _code(SW)
+    assert m and f'const SAVED = "{m.group(1)}";' in sw
+    assert re.search(r"key\s*!==\s*CACHE\s*&&\s*key\s*!==\s*SAVED", sw), "activate 가 SAVED 를 남기지 않음"
 
 
 # --- #13 (4-5) ---
