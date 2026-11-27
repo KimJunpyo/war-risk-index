@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { SITE_URL } from "@/shared/config/env";
-import { PageScrollbar } from "@/shared/ui";
+import { PageScrollbar, ServiceWorkerRegistration } from "@/shared/ui";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -41,6 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {children}
         <PageScrollbar />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
