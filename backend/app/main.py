@@ -477,6 +477,8 @@ def shelter_regions() -> dict:
 
 # ---------- 재외공관·영사콜센터 ----------
 
+EMBASSY_FIELDS = ("name", "kind", "address", "tel", "emergency_tel")  # 응답의 공관 항목(나라별·묶음 공통)
+
 def _embassy_as_of(df: pd.DataFrame, path: Path) -> str:
     """수집일(KST). 수집일 열이 없는 예전 파일만 파일 mtime 으로 대신한다(다음 갱신 때 열이 생김)."""
     if embassies.COLLECTED_COLUMN in df:
@@ -484,20 +486,38 @@ def _embassy_as_of(df: pd.DataFrame, path: Path) -> str:
     return datetime.fromtimestamp(_mtime(path), embassies.KST).strftime("%Y-%m-%d")
 
 
+def _embassy_table() -> tuple[pd.DataFrame, dict]:
+    """(공관 표, 응답 머리 {available, as_of, call_center}). 키·파일이 없으면 빈 표."""
+    path = ROOT / embassies.EMBASSY_FILE
+    df = _csv(path, dtype=str, keep_default_na=False) if data_go_kr.service_key() else pd.DataFrame()
+    return df, {"available": not df.empty, "as_of": _embassy_as_of(df, path) if len(df) else None,
+                "call_center": embassies.CALL_CENTER}
+
+
+def _embassy_items(rows: pd.DataFrame) -> list[dict]:
+    return [{k: r[k] or None for k in EMBASSY_FIELDS} for r in rows.to_dict("records")]
+
+
 @app.get("/api/countries/{code}/embassies")
 def country_embassies(code: str) -> dict:
     """나라의 대한민국 재외공관(대사관 먼저)과 영사콜센터. 키·파일 없음·KOR 이면 공관은 빈 목록."""
     _country_or_404(code)
-    path = ROOT / embassies.EMBASSY_FILE
-    df = _csv(path, dtype=str, keep_default_na=False) if data_go_kr.service_key() else pd.DataFrame()
-    out = {"available": not df.empty, "as_of": _embassy_as_of(df, path) if len(df) else None,
-           "call_center": embassies.CALL_CENTER, "embassies": []}
+    df, out = _embassy_table()
+    out["embassies"] = []
     iso2 = _iso2(code)
     if df.empty or not iso2 or code == "KOR":
         return out
-    rows = df[df["iso2"] == iso2]  # 파일은 이미 대사관 먼저 정렬돼 있음
-    out["embassies"] = [{k: r[k] or None for k in ("name", "kind", "address", "tel", "emergency_tel")}
-                        for r in rows.to_dict("records")]
+    out["embassies"] = _embassy_items(df[df["iso2"] == iso2])  # 파일은 이미 대사관 먼저 정렬돼 있음
+    return out
+
+
+@app.get("/api/embassies")
+def list_embassies() -> dict:
+    """공관이 있는 모든 나라(지수 대상과 무관, iso2 오름차순)의 공관 묶음. 오프라인 화면이 한 번에 받는다(#76)."""
+    df, out = _embassy_table()
+    # groupby 는 그룹 안의 파일 순서(대사관 먼저)를 지킨다
+    out["countries"] = [{"iso2": iso2, "embassies": _embassy_items(rows)}
+                        for iso2, rows in df.groupby("iso2", sort=True)] if len(df) else []
     return out
 
 

@@ -18,6 +18,26 @@ export interface EmbassyContacts {
   embassies: Embassy[];
 }
 
+/** GET /api/embassies 묶음 응답(#76). 나라는 iso2 오름차순, 나라 안 공관은 대사관 먼저 */
+export interface EmbassyBundle {
+  available: boolean;
+  as_of: string | null;
+  call_center: EmbassyContacts["call_center"];
+  countries: { iso2: string; embassies: Embassy[] }[];
+}
+
+/** 화면 출처 표기. 이름·주소는 푸터 DATA_SOURCES 의 같은 항목과 같다 */
+export const EMBASSY_SOURCE = { name: "외교부 재외공관 정보(공공데이터포털)", url: "https://www.data.go.kr/" };
+
+const ko = new Intl.Collator("ko");
+
+/** 묶음 응답 → 화면 나라 목록(한국어 이름 가나다순). 데이터가 없으면(available false) 빈 목록이라 영사콜센터만 남는다.
+ *  이름 함수는 받아서 쓴다(shared/lib countryName 은 JSON import 라 node --test 에서 불러오지 못함) */
+export function embassyCountries(bundle: EmbassyBundle, nameOf: (iso2: string) => string) {
+  if (!bundle.available) return [];
+  return bundle.countries.map((c) => ({ ...c, name: nameOf(c.iso2) })).sort((a, b) => ko.compare(a.name, b.name));
+}
+
 /** 외교부 원문 전화 표기 → tel: 링크. 원문이 "+53) 7204-0977, 0988"·"(81) 92-…"·"…~3" 처럼 제각각이라
  *  첫 번호만 숫자로 남기고 국내 지역번호 앞 "(0)" 은 뺀다. +·( 로 시작하지 않으면 국가번호인지 알 수 없어
  *  null(링크 없이 텍스트만): 잘못된 번호로 걸리는 것보다 안전. */

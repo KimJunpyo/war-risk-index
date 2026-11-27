@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { SAVED_CACHE } from "../src/widgets/nearby-shelters/model/saved";
 
 // 이슈 #25(3-2) 대피소 결과 키워드 검색·페이지네이션·카드 배치 실측. 기준 화면 폭(360·768·1080·1440)
 // 건수 기대값은 로컬 data/shelters.csv 실데이터(2026-11-10 확인). 데이터가 바뀌면 전제 검사가 먼저 실패한다.
@@ -15,6 +16,9 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 //   거리 배지 "오른쪽 위" = 배지 오른쪽 끝이 카드 내용(이름·주소·배지 공통 조상의 padding 안쪽) 오른쪽 끝, 배지 아래 끝이 주소 위
 // - 쪽을 바꾸면 결과 목록 맨 위로 스크롤(첫 카드가 화면 안에 다 보임), 포커스는 누른 버튼에 그대로
 // - 검색 0건: "‘검색어’가 들어간 대피소가 없습니다."
+// - 저장(#81): 지역 결과(1곳 이상)에만 접근 가능한 이름 "이 기기에 저장" 버튼(위치 결과에는 DOM 에 없음). 누르면 위젯의 role="status" 에
+//   "저장했습니다". Cache Storage 에는 SAVED_CACHE 캐시 하나에 항목 하나, 키 경로는 "/saved-shelters/{시·도 시·군·구}"(쿼리 없음).
+//   다시 저장하면 그 항목 하나로 덮어쓴다. 위치·검색어는 어느 저장소(localStorage·sessionStorage·쿠키·Cache Storage)에도 없다
 const WIDTHS = [360, 768, 1080, 1440];
 const HEIGHT = 900;
 const MD = 768;
@@ -68,6 +72,8 @@ const JINHAE = "진해구"; // 창원시에서 주소에만 있고 여러 쪽(13
 const JINHAE_APT = "진해구 아파트"; // 두 단어 AND(78곳)
 const PARKING = "주차장"; // 저장소 검사용 검색어
 const NONE = "zzzz";
+const SAVE = "이 기기에 저장";
+const SAVED_DONE = "저장했습니다";
 const noMatch = (q: string) => `‘${q}’가 들어간 대피소가 없습니다.`;
 
 type Shelter = {
@@ -168,6 +174,16 @@ async function pickRegion(widget: Locator, r: Region): Promise<ShelterResult> {
   await widget.locator(SIGUNGU).selectOption(r.sigungu);
   return (await res).json();
 }
+
+/** Cache Storage 의 모든 항목: 캐시 이름, 키 주소, 본문 */
+const cachedEntries = (page: Page) => page.evaluate(async () => {
+  const all: { cache: string; url: string; body: string }[] = [];
+  for (const cache of await caches.keys()) {
+    const c = await caches.open(cache);
+    for (const req of await c.keys()) all.push({ cache, url: req.url, body: (await (await c.match(req))?.text()) ?? "" });
+  }
+  return all;
+});
 
 /** 위치 조회(좌표는 test.use 의 geolocation). 화면이 받은 응답을 돌려준다 */
 async function findNearby(widget: Locator): Promise<ShelterResult> {
@@ -668,13 +684,13 @@ test.describe("폭과 무관한 동작", () => {
       await expectFresh(near, "위치 조회 다시");
     });
 
-    test("저장소: 위치 요청·검색 뒤 localStorage·sessionStorage·쿠키에 좌표·검색어 없음", async ({ page }) => {
+    test("저장소: 위치 요청·검색 뒤 localStorage·sessionStorage·쿠키·Cache Storage 에 좌표·검색어 없음", async ({ page }) => {
       const widget = await open(page, WIDE);
       const near = await findNearby(widget);
       await expect(cardsOf(widget).first()).toBeVisible();
       const expectNotStored = async (label: string, needles: string[]) => {
         const web = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.cookie]));
-        const stored = `${web}\n${JSON.stringify(await page.context().cookies())}`;
+        const stored = `${web}\n${JSON.stringify(await page.context().cookies())}\n${JSON.stringify(await cachedEntries(page))}`;
         for (const needle of needles) expect.soft(stored, `${label}: "${needle}" 저장 안 함`).not.toContain(needle);
       };
       await expectNotStored("위치 요청 뒤", COORD_NEEDLES);
@@ -685,6 +701,35 @@ test.describe("폭과 무관한 동작", () => {
       await searchOf(widget).fill(PARKING);
       await expect(widget).toContainText(`총 ${fmt(totalOf(near))}곳 중 ${fmt(m)}곳`);
       await expectNotStored("검색 뒤", [...COORD_NEEDLES, PARKING, encodeURIComponent(PARKING)]);
+    });
+
+    test(`저장(#81): 지역 결과에만 "${SAVE}", 키는 지역 이름만·다시 저장하면 덮어씀, 위치 결과에는 버튼 없음`, async ({ page }) => {
+      const widget = await open(page, WIDE);
+      const save = widget.getByRole("button", { name: SAVE, exact: true });
+      /** 저장 버튼을 누르고, 캐시에 그 지역 항목 하나만 있는지 본다 */
+      const saveAndCheck = async (r: Region, data: ShelterResult) => {
+        await save.click();
+        await expect(widget.getByRole("status").filter({ hasText: SAVED_DONE }), `${r.sigungu}: 저장 안내`).toHaveCount(1);
+        const entries = await cachedEntries(page);
+        expect(entries.map((e) => [e.cache, decodeURIComponent(new URL(e.url).pathname), new URL(e.url).search]), `${r.sigungu}: 저장 항목`)
+          .toEqual([[SAVED_CACHE, `/saved-shelters/${r.sido} ${r.sigungu}`, ""]]);
+        expect.soft(entries[0].url, "키에 좌표 쿼리").not.toContain("lat=");
+        const body = JSON.parse(entries[0].body);
+        expect.soft(body.region, "본문 지역").toBe(`${r.sido} ${r.sigungu}`);
+        expect.soft(body.result.total, "저장 건수 = 응답 total").toBe(totalOf(data));
+        expect.soft(body.result.items, "저장 항목 수").toHaveLength(data.items.length);
+      };
+
+      await expect.soft(save, "조회 전: 저장 버튼").toHaveCount(0);
+      await saveAndCheck(CHANGWON, await pickRegion(widget, CHANGWON));
+      await saveAndCheck(OTHER, await pickRegion(widget, OTHER));
+
+      await findNearby(widget);
+      await expect(cardsOf(widget).first(), "위치 결과").toBeVisible();
+      await expect.soft(save, "위치 결과: 저장 버튼").toHaveCount(0);
+      const after = await cachedEntries(page);
+      expect.soft(after.map((e) => decodeURIComponent(new URL(e.url).pathname)), "위치 조회 뒤에도 저장본은 지역 것 그대로")
+        .toEqual([`/saved-shelters/${OTHER.sido} ${OTHER.sigungu}`]);
     });
 
     test("위치 요청: 홈을 열고 버튼을 누르기 전에는 위치를 묻지 않음", async ({ page }) => {

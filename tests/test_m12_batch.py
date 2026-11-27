@@ -10,7 +10,7 @@ test_m12_news.py), 배치와 이어지는 부분(순서·news/* 받기·올리�
   manifest = {키: {"sha256": 16진수, "mtime": st_mtime_ns}}.
 - 제외: data/gdelt_tmp/, data/npm_cache/, *.part, *.tmp. data/·out/ 밖(루트 .env·.git·.venv 등)은 보지도 받지도 않는다.
 - 받기: manifest → state/data/ → data/, state/out/ → out/ (sync 두 번, 제외 패턴은 원본 접두사 기준)
-  → out/api 로 공공데이터 응답(shelters/meta·regions, countries/*/embassies)과 뉴스(news/*)만. 받은 파일 mtime 은 manifest 값으로
+  → out/api 로 공공데이터 응답(shelters/meta·regions, embassies, countries/*/embassies)과 뉴스(news/*)만. 받은 파일 mtime 은 manifest 값으로
   되돌린다(뉴스 단계는 그 mtime 으로 다시 받을 때를 정한다).
   sync 가 0 으로 끝나도 manifest 의 state/ 키가 하나라도 로컬에 없으면 받기 실패다.
   받기가 실패하면(시간 초과 포함) 아무것도 돌리지 않고, 아무것도 올리지 않고, 0 이 아닌 종료 코드.
@@ -88,11 +88,13 @@ STATE_FILES = {"data/live/country_15min.csv": "key\n1\n", "data/travel_advisory.
                "out/country_meta.csv": "code\nKOR\n"}
 API_FILES = {"pairs.json": "[]", "shelters/meta.json": '{"available":true}',
              "shelters/regions.json": '{"available":true,"regions":[]}',
-             "countries/KOR/embassies.json": '{"available":true}', "countries/KOR/index.json": "[]",
+             "embassies.json": '{"available":true}', "countries/KOR/embassies.json": '{"available":true}',
+             "countries/KOR/index.json": "[]",
              "shelters/tiles/1_2.json": "[]"}
 VM_FILES = {**STATE_FILES, **{f"out/api/{rel}": text for rel, text in API_FILES.items()}}
 # 받기 때 out/api 로 받는 응답(available 값이 있는 것)
-GUARDED = ["out/api/countries/KOR/embassies.json", "out/api/shelters/meta.json", "out/api/shelters/regions.json"]
+GUARDED = ["out/api/countries/KOR/embassies.json", "out/api/embassies.json", "out/api/shelters/meta.json",
+           "out/api/shelters/regions.json"]
 NEW_LIVE = "key\n2\n"  # 가짜 live.update 가 쓰는 내용
 STALE_TILE = "shelters/tiles/1_2.json"
 # 가짜 publish 가 쓰는 응답: pairs.json 만 바뀌고 대피소 타일 하나가 없어졌다

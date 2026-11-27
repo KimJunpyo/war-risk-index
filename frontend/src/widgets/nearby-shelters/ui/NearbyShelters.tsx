@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { mapUrl, regionPath, sheltersPath, useShelterRegions, useShelters } from "@/entities/shelter";
 import { StatusText } from "@/shared/ui";
 import { countText, filterShelters, formatNumber, PAGE_SIZE, paginate } from "../model/results";
+import { saveShelters } from "../model/saved";
 
 const LOCATION_TIMEOUT_MS = 10_000; // 위치 요청 시간 초과
 const LOCATION_GIVEUP_MS = 15_000; // 권한 팝업에 응답이 없으면 브라우저 timeout 이 돌지 않아 자체로 포기
@@ -22,6 +24,7 @@ const PAGER_BUTTON = `${BUTTON} aria-disabled:cursor-default aria-disabled:opaci
 const CARD_GRID = "grid scroll-mt-2 grid-cols-1 gap-2 @[40rem]:grid-cols-2";
 const PUBLIC_KIND = "공공용시설"; // 대부분이 이 값이라 배지를 달지 않는 시설 구분
 const ANCHOR_ID = "shelters"; // 바로가기 주소 /#shelters
+const SAVED_PAGE = "/emergency#saved-shelters"; // 저장한 대피소를 보는 곳(SavedShelters 영역)
 
 // 바로가기를 마친 내비게이션의 useRouter().bfcacheId(앱 안 링크로 올 때마다 바뀐다). 내비게이션마다 한 번만:
 // 다른 나라를 골랐다 한국으로 돌아와 영역을 다시 그려도 움직이지 않고, 앱 안 링크로 다시 오면 다시 한다
@@ -34,7 +37,8 @@ let anchoredId: string | null = null;
 export function NearbyShelters() {
   const { bfcacheId } = useRouter();
   const regions = useShelterRegions();
-  const [query, setQuery] = useState<{ path: string; nearby: boolean } | null>(null);
+  // region: 지역 조회일 때만 지역 이름(저장 키). 위치 조회에는 없다
+  const [query, setQuery] = useState<{ path: string; nearby: boolean; region?: string } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locFailed, setLocFailed] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
@@ -43,6 +47,7 @@ export function NearbyShelters() {
   // 결과 안 검색어와 쪽(1부터). 브라우저 저장소에는 두지 않는다
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "failed">("idle");
   // 마지막 조회 의도의 순번. 늦게 온 위치 콜백이 그 뒤의 지역 선택을 덮어쓰지 않게 한다.
   const seq = useRef(0);
   const listRef = useRef<HTMLUListElement>(null);
@@ -62,10 +67,11 @@ export function NearbyShelters() {
   if (regions.data?.available === false || result.data?.available === false) return null;
 
   // 새 조회(위치·지역)는 검색어를 비우고 1쪽부터
-  const lookup = (q: { path: string; nearby: boolean }) => {
+  const lookup = (q: { path: string; nearby: boolean; region?: string }) => {
     setQuery(q);
     setKeyword("");
     setPage(1);
+    setSaveState("idle");
   };
 
   const findNearby = () => {
@@ -103,13 +109,13 @@ export function NearbyShelters() {
     setSigungu("");
     const list = regions.data?.regions.find((r) => r.sido === v)?.sigungu ?? [];
     // 시·군·구가 없는 시·도(세종)는 바로 조회
-    if (v && list.length === 0) lookup({ path: regionPath(v), nearby: false });
+    if (v && list.length === 0) lookup({ path: regionPath(v), nearby: false, region: v });
   };
   const pickSigungu = (v: string) => {
     seq.current++;
     setLocating(false);
     setSigungu(v);
-    if (v) lookup({ path: regionPath(`${sido} ${v}`), nearby: false });
+    if (v) lookup({ path: regionPath(`${sido} ${v}`), nearby: false, region: `${sido} ${v}` });
   };
 
   const items = result.data?.items;
@@ -117,6 +123,13 @@ export function NearbyShelters() {
   const nearbyEmpty = query?.nearby && items?.length === 0;
   const matched = filterShelters(items ?? [], keyword);
   const view = paginate(matched, page, PAGE_SIZE);
+  // 저장은 지역 결과만, Cache Storage 가 있는 브라우저에서만(plan.md Q4 B). 결과는 브라우저에서만 생겨 서버 렌더와 어긋나지 않는다
+  const region = hasResults && !query?.nearby ? query?.region : undefined;
+  const canSave = !!region && "caches" in window;
+  const save = () => {
+    if (!region || !result.data) return;
+    saveShelters(region, result.data).then(() => setSaveState("saved"), () => setSaveState("failed"));
+  };
   // 쪽을 바꾸면 결과 목록 맨 위로(포커스는 누른 버튼에 그대로). 새 카드를 그린 뒤에 스크롤한다:
   // 그리기 전에 스크롤하면 WebKit 이 스크롤 전에 고른 기준 요소로 scroll anchoring 을 해 되돌린다
   const goPage = (p: number) => {
@@ -223,10 +236,20 @@ export function NearbyShelters() {
             <button type="button" onClick={() => goPage(view.page + 1)} aria-disabled={view.page === view.pageCount} className={PAGER_BUTTON}>다음</button>
           </div>
         )}
+        {canSave && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={save} className={BUTTON}>이 기기에 저장</button>
+            <p role="status">
+              {saveState === "saved" && <>저장했습니다. <Link href={SAVED_PAGE} className={LINK}>비상 대비 안내</Link>에서 인터넷 없이 볼 수 있습니다.</>}
+              {saveState === "failed" && <span className="text-amber-300">이 브라우저에 저장하지 못했습니다.</span>}
+            </p>
+          </div>
+        )}
       </div>
 
       <p className="mt-2 text-[11px]">
-        위치는 대피소 검색에만 쓰고 저장하지 않습니다. 약 1km 단위로 반올림해 보냅니다.
+        {"위치(내 주변 찾기)는 저장하지 않습니다. 지역 결과는 '이 기기에 저장'을 누를 때만 이 기기에 남습니다."}
+        {" "}위치는 약 1km 단위로 반올림해 보냅니다.
         {" "}출처: 행정안전부 민방위 대피시설(공공데이터포털){result.data?.as_of && ` · 기준일 ${result.data.as_of}`}
       </p>
     </section>

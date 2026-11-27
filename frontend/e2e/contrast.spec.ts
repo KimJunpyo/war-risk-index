@@ -246,6 +246,34 @@ const STATES: State[] = [
   // 카드가 저장값(가방 두 목록에서 하나씩 2개 담음, 6명·14일 비축)을 그린 화면을 한 번 더 잰다. 저장값은 하이드레이션 뒤에 카드에 들어온다
   { name: "비상 대비 페이지 기본", path: "/emergency" },
   {
+    // 이슈 #79 저장 상태 줄: 개발 서버에는 서비스 워커가 없어 Cache Storage 에 저장본을 넣고(WebKit 은 이동하면 항목이 사라져 init 스크립트로)
+    // 오프라인으로 바꿔 오프라인 안내가 보인 화면을 잰다(계약은 emergency.spec.ts)
+    name: "오프라인 안내",
+    path: "/emergency",
+    act: async (page) => {
+      await page.addInitScript(() => {
+        void caches.open("wri-emergency-v1").then((cache) =>
+          cache.put("/emergency", new Response("<!doctype html>", { headers: { date: "Fri, 27 Nov 2026 05:04:00 GMT" } })));
+      });
+      await page.reload();
+      await hydrated(page);
+      await page.context().setOffline(true);
+      await expect(page.getByText("오프라인: 저장된 안내입니다", { exact: false }), "오프라인 안내").toBeVisible();
+    },
+  },
+  {
+    // 이슈 #77 재외공관: 접힌 나라 안쪽은 크기가 없어 기본 상태에서 재지 않는다. 공관이 많은 일본을 펼쳐 공관 이름·주소·전화 링크를 잰다
+    name: "재외공관 일본 펼침",
+    path: "/emergency",
+    act: async (page) => {
+      await hydrated(page);
+      const japan = page.locator("section#embassies details").filter({ has: page.locator("summary", { hasText: /^일본$/ }) });
+      await expect(japan, "일본 접기(공관 데이터가 있어야 잴 수 있음)").toHaveCount(1);
+      await japan.locator("summary").click();
+      await expect(japan.locator('a[href^="tel:"]').first(), "일본 공관 전화").toBeVisible();
+    },
+  },
+  {
     name: "준비 카드 진행 중",
     path: "/emergency",
     act: async (page) => {

@@ -75,6 +75,7 @@ const FIXED_ROUTES = new Map([
   ["/api/cases", DAILY_MAX_AGE],
   ["/api/blend", DAILY_MAX_AGE],
   ["/api/shelters/regions", DAILY_MAX_AGE],
+  ["/api/embassies", DAILY_MAX_AGE],
 ]);
 // 파라미터는 아무 글자나 받고 아래 패턴으로 따로 검사한다(어긋나도 FastAPI 처럼 "알 수 없는 …" 404)
 const PAIR_ROUTE = /^\/api\/pairs\/([^/]+)\/(index|catalysts)$/;

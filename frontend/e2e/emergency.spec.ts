@@ -1,7 +1,12 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { CIVIL_ALERTS } from "../src/entities/guide/model/alerts";
 import { GO_BAG_ITEMS, KIT_CALC_STORAGE_KEY, KIT_STORAGE_KEY, STOCK_ITEMS } from "../src/entities/guide/model/kit";
 import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
+import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/embassy-contacts/model/embassy";
+import { savedAtKst } from "../src/widgets/offline-status/model/saved-at";
+import { filterShelters } from "../src/widgets/nearby-shelters/model/results";
+import { SAVED_CACHE, savedAtText, savedKey, type SavedShelters } from "../src/widgets/nearby-shelters/model/saved";
+import type { Shelter } from "../src/entities/shelter/model/types";
 
 // 이슈 #74(1-4) /emergency 비상 대비 안내와 홈 헤더 진입 링크, #108(1-9) 첫 화면(경보 타일·미리 준비하기 카드) 실측. 기준 화면 폭(360·768·1080·1440)
 // 경보 내용은 이슈 #72 모델(CIVIL_ALERTS), 카드 값은 kit.ts 목록·저장 키와 인수 조건의 숫자를 그대로 쓴다. 소스 쪽 계약(토큰 색만·서버 컴포넌트·
@@ -32,10 +37,23 @@ import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 //   - 서버 HTML 은 기본값(0/7·0/8, 4명·7일 비축)이고 저장값은 하이드레이션 뒤에 반영한다(하이드레이션 경고 없음).
 //     아래 #kit 타일을 누르거나 #calc 의 −/+·기간 칩을 바꾸면 1초 안에 카드가 바뀐다. 카드를 누르면 주소에 #kit·#calc, 그 영역이 화면 안
 // - 가방·계산 영역: section#kit·section#calc 하나씩(내용 계약과 홈 체크리스트 카드의 /emergency#kit 링크는 emergency-kit.spec.ts)
-// - 키보드: Tab 순서 ← 전체 지도 → 경보 타일 5개(순서대로) → 가방 카드 → 물 카드 → #kit 첫 타일, Tab 으로 오면 포커스 표시(outline 또는 box-shadow).
+// - 키보드: Tab 순서 ← 전체 지도 → WebKit 문서 링크(#79) → 경보 타일 5개(순서대로) → 가방 카드 → 물 카드 → #kit 첫 타일, Tab 으로 오면 포커스 표시(outline 또는 box-shadow).
 //   WebKit 은 Safari 기본 설정처럼 Tab 이 링크를 건너뛰어 Firefox 에서만 본다(footer.spec.ts 와 같음)
+// - 재외공관 연락처(#77): section#embassies(#calc 뒤). 서버가 GET /api/embassies 를 받아 HTML 에 넣는다(브라우저 요청 없음, 위 폭별 테스트가 확인).
+//   자바스크립트 실행 전 HTML 의 그 영역에 영사콜센터 해외 번호, <details> 가 응답 나라 수만큼(available false 면 0개, 단위 테스트는 embassy.test.ts).
+//   summary 글자는 나라 한국어 이름이고 문서 순서가 Intl.Collator("ko") 가나다순. "일본"을 펼치면 공관 li 1곳 이상, "대표 " 뒤 전화 링크는 tel:+81.
+//   영역 끝(마지막 자식)에 EMBASSY_SOURCE 이름 링크(href 같음)와 "수집일 {as_of}". 360·768 1열, 1080·1440 2열이고 펼쳐도 가로 넘침 없음
 // - 정적 페이지: 브라우저가 API 주소로 요청하지 않는다. 자바스크립트 실행 전 HTML(<script> 밖 body)에 경보 이름 5개와
 //   상세 링크 href="/emergency/<id>" 5개가 있다
+// - 저장 상태 줄(#79): main header 안 [role="status"] 하나. Cache Storage 의 /emergency 응답(어느 캐시 이름이든)의 date 헤더를
+//   한국 시각 "YYYY-MM-DD HH:mm"(savedAtKst)으로 쓴다. 온라인 "이 기기에 저장됨 · 저장 {시각}", 오프라인(offline 사건) 1초 안에
+//   "오프라인: 저장된 안내입니다 · 저장 {시각}", 다시 온라인이면 1초 안에 오프라인 글자가 사라진다.
+//   저장본이 없거나 서비스 워커를 지원하지 않으면(navigator 에 serviceWorker 없음) 그 줄이 없다.
+//   개발 서버에는 서비스 워커가 없어 테스트가 캐시에 저장본을 직접 넣는다(sw.js 의 저장·응답은 수동 확인)
+// - 저장한 대피소(#81): 저장본(Cache Storage SAVED_CACHE 의 savedKey(지역) 항목)이 있을 때만 section#saved-shelters(#embassies 뒤).
+//   제목 "저장한 대피소", 지역 이름과 "저장 {savedAtText}", 건수 "총 N곳"(N = total), 검색창 "결과에서 찾기"("총 N곳 중 M곳"),
+//   10곳이 넘으면 "이전"·"다음"과 "n / m". "지우기"를 누르면 캐시가 없어지고 영역이 사라진다. 브라우저 요청 없이 캐시에서만 읽는다
+// - 아이폰 안내(#79): main header 안에 IOS_NOTICE 글자와 WebKit 추적 방지 문서 링크(href WEBKIT_DOC, 새 탭, rel 에 noreferrer)
 // - 홈 헤더(main 의 첫 header) 제목 줄에 접근 이름이 정확히 "비상 대비"인 링크 하나, href="/emergency".
 //   제목(h1)·LiveBadge·가이드 버튼과 같은 줄, 링크 글자도 한 줄, 헤더 내용 폭 안, 높이 24px 이상.
 //   좁은 폭에서는 아이콘만 보여도 된다(접근 이름은 모든 폭에서 같음)
@@ -78,6 +96,10 @@ const GUIDE_NAME = "가이드 · 여행경보 단계";
 const SCRIPT = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
 const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
 const BARS = 'progress, [role="progressbar"]'; // 진행 막대
+const EMBASSY = "section#embassies"; // 재외공관 영역(#77)
+const JAPAN = "일본";
+const JAPAN_TEL = "tel:+81"; // 일본 공관 대표 전화 링크 앞부분
+const EMBASSY_COLS = [1, 1, 2, 2]; // 폭 단계별 나라 접기 열 수(plan.md 7-4)
 const BAG_ROWS = [{ name: "3일 가방", total: GO_BAG_ITEMS.length }, { name: "7일 비축", total: STOCK_ITEMS.length }]; // 가방 카드 줄(목록 순서)
 // 저장값(인수 조건): 가방은 두 목록에서 하나씩 2개, 계산은 6명·14일 비축
 const SAVED_KIT = JSON.stringify([GO_BAG_ITEMS[0].id, STOCK_ITEMS[0].id]);
@@ -93,6 +115,38 @@ const WATER = {
   saved: ["물 252L(약 252kg)", "6명 · 14일 비축", "2L 생수 6병 묶음 21팩"],
   max: ["물 840L(약 840kg)", "20명 · 14일 비축", "2L 생수 6병 묶음 70팩"],
 };
+
+// 저장 상태 줄(#79)
+const SW_CACHE = "wri-emergency-v2"; // public/sw.js 의 캐시 이름(화면은 이름 없이 찾으므로 버전이 올라도 테스트는 그대로 통과)
+const SAVED_DATE = "Fri, 27 Nov 2026 05:04:00 GMT"; // 저장본 응답의 date 헤더 → 한국 시각 2026-11-27 14:04
+const STATUS = 'main header [role="status"]';
+const SAVED_ONLINE = "이 기기에 저장됨";
+const SAVED_OFFLINE = "오프라인: 저장된 안내입니다";
+const STATUS_MS = 1_000; // offline·online 사건 뒤 줄이 바뀌기까지 한도(인수 조건 "1초 안에")
+const IOS_NOTICE = "아이폰·아이패드 Safari는 7일 넘게 이 사이트를 열지 않으면 저장본을 지울 수 있습니다. 공유 → 홈 화면에 추가하면 유지됩니다.";
+const WEBKIT_DOC = "https://webkit.org/tracking-prevention/";
+
+// 저장한 대피소(#81). 모의 저장본: 12곳(2쪽), 그중 3곳이 "초등학교"
+const SAVED_SECTION = "section#saved-shelters";
+const SAVED_REGION = "경상남도 창원시";
+const SAVED_ISO = "2026-11-27T05:04:00.000Z"; // → 한국 시각 2026-11-27 14:04
+const SAVED_TOTAL = 12;
+const SCHOOL = "초등학교";
+const SAVED_ITEMS: Shelter[] = Array.from({ length: SAVED_TOTAL }, (_, i) => ({
+  name: i % 4 === 0 ? `창원${i}${SCHOOL}` : `창원 대피소 ${i}`,
+  address: `경상남도 창원시 의창구 ${i}번길`,
+  lat: 35.2,
+  lon: 128.6,
+  distance_m: null,
+  capacity: 100 + i,
+  kind: "공공용시설",
+}));
+const SAVED_BODY: SavedShelters = {
+  region: SAVED_REGION,
+  savedAt: SAVED_ISO,
+  result: { available: true, as_of: "2026-11-10", items: SAVED_ITEMS, total: SAVED_TOTAL },
+};
+const NOREFERRER = /(^|\s)noreferrer(\s|$)/;
 
 // LiveBadge 상태 고정: /api/live 응답의 as_of 를 지금보다 agoMs 이전 슬롯으로 바꾼다(45분이 넘으면 지연).
 // 배지 글자가 상태마다 달라 신선 상태와 글자가 가장 긴 지연 상태를 본다
@@ -190,6 +244,26 @@ async function open(page: Page, width = NARROW, height = HEIGHT) {
 /** 하이드레이션 끝을 알리는 요소가 없어 네트워크가 잠잠해질 때까지 기다린다(그 전 누름·저장값은 React 가 받지 못함) */
 const hydrated = (page: Page) => page.waitForLoadState("networkidle");
 
+/** 서비스 워커가 저장한 것처럼 Cache Storage 에 date 헤더를 단 /emergency 응답을 넣고 새로 고친다.
+ *  Playwright WebKit(임시 프로필)은 이동하면 캐시 항목이 사라져 문서마다 init 스크립트로 넣는다(화면은 하이드레이션 뒤에 읽어 그 전에 끝남) */
+async function reloadWithSaved(page: Page, date = SAVED_DATE) {
+  await page.addInitScript(([name, path, d]) => {
+    void caches.open(name).then((cache) =>
+      cache.put(path, new Response("<!doctype html>", { headers: { "content-type": "text/html", date: d } })));
+  }, [SW_CACHE, PATH, date]);
+  await page.reload();
+  await hydrated(page);
+}
+
+/** 홈에서 저장한 것처럼 대피소 저장본을 넣고 새로 고친다. WebKit 이 이동하면 캐시 항목을 잃어 reloadWithSaved 와 같이 init 스크립트로 넣는다 */
+async function reloadWithShelters(page: Page) {
+  await page.addInitScript(([name, key, body]) => {
+    void caches.open(name).then((cache) => cache.put(key, new Response(body, { headers: { "content-type": "application/json" } })));
+  }, [SAVED_CACHE, savedKey(SAVED_REGION), JSON.stringify(SAVED_BODY)]);
+  await page.reload();
+  await hydrated(page);
+}
+
 /** 담기·계산 저장값을 넣고 새로 고친다 */
 async function reloadWith(page: Page, kit: string, calc: string) {
   await page.evaluate(([k, kv, c, cv]) => {
@@ -259,6 +333,52 @@ test("자바스크립트 실행 전 HTML: 경보 이름 5개·상세 링크 5개
   expect.soft(body, "푸터(SiteFooter)").toMatch(/<footer\b/);
 });
 
+/** 테스트가 비교할 공관 묶음 응답(서버가 받는 것과 같은 API) */
+async function embassyBundle(request: APIRequestContext): Promise<EmbassyBundle> {
+  const res = await request.get(`${API_BASE_URL}/api/embassies`);
+  expect(res.status(), "/api/embassies 응답").toBe(200);
+  return res.json();
+}
+const countryOf = (page: Page, name: string) =>
+  page.locator(`${EMBASSY} details`).filter({ has: page.locator("summary", { hasText: new RegExp(`^${name}$`) }) });
+
+test("재외공관(자바스크립트 실행 전 HTML): 영사콜센터 해외 번호, 응답 나라 수만큼 <details>", async ({ request }) => {
+  const bundle = await embassyBundle(request);
+  const markup = (await (await request.get(PATH)).text()).replace(SCRIPT, "");
+  const start = markup.indexOf('id="embassies"');
+  expect(start, "section#embassies").toBeGreaterThan(0);
+  const section = markup.slice(start, markup.indexOf("<footer", start));
+  expect.soft(section, "영사콜센터 해외 번호").toContain(CALL_CENTER.tel_overseas);
+  expect.soft(section.match(/<details\b/g)?.length ?? 0, "나라 접기 수 = 응답 나라 수")
+    .toBe(bundle.available ? bundle.countries.length : 0);
+});
+
+test("재외공관: 나라 접기 가나다순(Intl.Collator ko), 일본 펼치면 공관 1곳 이상·대표 전화 tel:+81, 영역 끝 출처 링크·수집일", async ({ page, request }) => {
+  const bundle = await embassyBundle(request);
+  test.skip(!bundle.available, "공관 데이터 없음(백엔드 공공데이터 키 없음)");
+  await open(page);
+  await hydrated(page);
+  const names = await page.locator(`${EMBASSY} details > summary`).allTextContents();
+  expect.soft(names, "나라 수").toHaveLength(bundle.countries.length);
+  expect.soft(names, "가나다순").toEqual([...names].sort(new Intl.Collator("ko").compare));
+
+  const japan = countryOf(page, JAPAN);
+  await expect(japan, JAPAN).toHaveCount(1);
+  await japan.locator("summary").click();
+  await expect(japan, `${JAPAN} 펼침`).toHaveAttribute("open");
+  await expect.soft(japan.locator("li").first(), `${JAPAN} 공관`).toBeVisible();
+  // "대표 " 글자 바로 뒤의 링크 = 대표 전화(긴급 전화는 한국 번호일 수 있어 보지 않는다)
+  const tels = await japan.locator('a[href^="tel:"]').evaluateAll((els) =>
+    els.filter((a) => a.previousSibling?.textContent?.endsWith("대표 ")).map((a) => a.getAttribute("href")));
+  expect.soft(tels.length, `${JAPAN} 대표 전화 링크 수`).toBeGreaterThan(0);
+  expect.soft(tels.filter((h) => !h?.startsWith(JAPAN_TEL)), `${JAPAN_TEL} 로 시작하지 않는 대표 전화`).toEqual([]);
+
+  const last = page.locator(`${EMBASSY} > :last-child`);
+  const source = last.getByRole("link", { name: EMBASSY_SOURCE.name, exact: true });
+  await expect.soft(source, "출처 링크").toHaveAttribute("href", EMBASSY_SOURCE.url);
+  await expect.soft(last, "수집일").toContainText(`수집일 ${bundle.as_of}`);
+});
+
 test("sitemap.xml 에 <SITE_URL>/emergency", async ({ request }) => {
   const res = await request.get("/sitemap.xml");
   expect(res.status(), "sitemap.xml 응답").toBe(200);
@@ -315,6 +435,48 @@ test("경보 타일: h2 아래 /emergency/<id> 링크 5개(CIVIL_ALERTS 순서)�
     expect.soft(c.name, `${a.id} 이름 글자 색 = --alert-${a.id}`).toBe(c.token);
     expect.soft(c.stroke, `${a.id} 아이콘 선 색 = --alert-${a.id}`).toBe(c.token);
   }
+});
+
+test("아이폰 안내(#79): 머리말에 안내 문구와 WebKit 추적 방지 문서 링크(새 탭·noreferrer)", async ({ page }) => {
+  await open(page);
+  const header = page.locator("main header");
+  await expect.soft(header, "아이폰 안내 문구").toContainText(IOS_NOTICE);
+  const link = header.locator(`a[href="${WEBKIT_DOC}"]`);
+  await expect(link, "WebKit 문서 링크 하나").toHaveCount(1);
+  await expect.soft(link, "새 탭").toHaveAttribute("target", "_blank");
+  await expect.soft(link, "rel 에 noreferrer").toHaveAttribute("rel", NOREFERRER);
+});
+
+test("저장 상태 줄(#79): 저장본 없으면 없음 → 저장본(date 헤더)이 있으면 한국 시각, offline 1초 안에 오프라인 안내, online 이면 사라짐", async ({ page, context }) => {
+  await open(page);
+  await hydrated(page);
+  await expect.soft(page.locator(STATUS), "저장본 없음: 저장 상태 줄").toHaveCount(0);
+
+  await reloadWithSaved(page);
+  const savedAt = savedAtKst(SAVED_DATE);
+  expect(savedAt, "date 헤더 → 한국 시각").toBe("2026-11-27 14:04");
+  const status = page.locator(STATUS);
+  await expect(status, "온라인 저장 상태 줄").toHaveText(`${SAVED_ONLINE} · 저장 ${savedAt}`);
+
+  await context.setOffline(true);
+  await expect(status, "offline 뒤 1초 안에 오프라인 안내").toHaveText(`${SAVED_OFFLINE} · 저장 ${savedAt}`, { timeout: STATUS_MS });
+  await context.setOffline(false);
+  await expect(status, "online 뒤 1초 안에 오프라인 안내 사라짐").toHaveText(`${SAVED_ONLINE} · 저장 ${savedAt}`, { timeout: STATUS_MS });
+  await expect.soft(page.locator("main"), "온라인에서 오프라인 글자").not.toContainText(SAVED_OFFLINE);
+});
+
+test("저장 상태 줄(#79): 서비스 워커를 지원하지 않으면 저장본이 있어도 없음(오프라인이어도)", async ({ page, context }) => {
+  await open(page);
+  await page.addInitScript(() => {
+    delete (Navigator.prototype as { serviceWorker?: unknown }).serviceWorker;
+  });
+  await reloadWithSaved(page);
+  expect(await page.evaluate(() => "serviceWorker" in navigator), "서비스 워커 미지원 흉내").toBe(false);
+  expect(await page.evaluate(async (p) => !!(await caches.match(p)), PATH), "저장본은 있음").toBe(true);
+  await expect.soft(page.locator(STATUS), "온라인: 저장 상태 줄").toHaveCount(0);
+  await context.setOffline(true);
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 500))); // offline 사건 뒤 다시 그릴 시간
+  await expect.soft(page.locator(STATUS), "오프라인: 저장 상태 줄").toHaveCount(0);
 });
 
 test("360×800: 스크롤하기 전에 경보 타일 5개가 모두 화면 안", async ({ page }) => {
@@ -387,12 +549,13 @@ test(`저장값(${KIT_STORAGE_KEY} 2개·${KIT_CALC_STORAGE_KEY} 6명·14일 비
   expect.soft(errors, "콘솔 오류·하이드레이션 경고").toEqual([]);
 });
 
-test("키보드: Tab 순서 ← 전체 지도 → 경보 타일 5개 → 가방 카드 → 물 카드 → 가방 첫 타일, Tab 으로 오면 포커스 표시", async ({ page, browserName }) => {
+test("키보드: Tab 순서 ← 전체 지도 → WebKit 문서 링크(#79) → 경보 타일 5개 → 가방 카드 → 물 카드 → 가방 첫 타일, Tab 으로 오면 포커스 표시", async ({ page, browserName }) => {
   test.skip(browserName === "webkit", "WebKit 은 Tab 으로 링크에 포커스하지 않음(footer.spec.ts 와 같음)");
   await open(page);
   await hydrated(page);
   const targets = [
     { name: HOME_LINK, el: page.getByRole("link", { name: /전체 지도/ }) },
+    { name: "WebKit 문서 링크", el: page.locator(`main header a[href="${WEBKIT_DOC}"]`) },
     ...CIVIL_ALERTS.map((a) => ({ name: `${a.name} 타일`, el: tileOf(page, a.id) })),
     { name: "가방 카드", el: bagCardOf(page) },
     { name: "물 카드", el: waterCardOf(page) },
@@ -493,3 +656,53 @@ for (const width of WIDTHS) {
     }
   });
 }
+
+for (const width of WIDTHS) {
+  test(`${width}px 재외공관: 나라 접기 열 수, 일본을 펼쳐도 가로 넘침 없음`, async ({ page }) => {
+    await open(page, width);
+    await hydrated(page);
+    const items = page.locator(`${EMBASSY} details`);
+    test.skip(await items.count() === 0, "공관 데이터 없음(백엔드 공공데이터 키 없음)");
+    expect.soft(await columns(items), "나라 접기 열 수").toBe(EMBASSY_COLS[step(width)]);
+    const japan = countryOf(page, JAPAN);
+    await japan.locator("summary").click();
+    await expect(japan, `${JAPAN} 펼침`).toHaveAttribute("open");
+    await expectNoOverflow(page, `${JAPAN} 펼침`);
+  });
+}
+
+test("저장한 대피소(#81): 저장본이 없으면 영역 없음 → 있으면 지역·저장 시각·총 N곳·검색·쪽 이동, 지우기면 캐시·영역이 없어짐, 요청·하이드레이션 경고 0건", async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await hydrated(page);
+  await expect.soft(page.locator(SAVED_SECTION), "저장본 없음: 영역").toHaveCount(0);
+
+  await reloadWithShelters(page);
+  const requests: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/saved-shelters") || isApi(r.url())) requests.push(r.url());
+  });
+  const section = page.locator(SAVED_SECTION);
+  await expect(section.getByRole("heading", { name: "저장한 대피소", exact: true })).toBeVisible();
+  expect(savedAtText(SAVED_ISO), "ISO → 한국 시각").toBe("2026-11-27 14:04");
+  await expect.soft(section, "지역 이름·저장 시각").toContainText(`${SAVED_REGION} · 저장 2026-11-27 14:04`);
+  await expect.soft(section, "건수").toContainText(`총 ${SAVED_TOTAL}곳`);
+  const cards = section.locator("li");
+  await expect.soft(cards, "1쪽 카드").toHaveCount(10);
+  await expect.soft(section, "쪽 위치").toContainText("1 / 2");
+  await section.getByRole("button", { name: "다음", exact: true }).click();
+  await expect.soft(cards, "2쪽 카드").toHaveCount(SAVED_TOTAL - 10);
+
+  const search = section.getByRole("searchbox", { name: "결과에서 찾기", exact: true });
+  await search.fill(SCHOOL);
+  const m = filterShelters(SAVED_ITEMS, SCHOOL).length;
+  await expect.soft(section, "검색 건수").toContainText(`총 ${SAVED_TOTAL}곳 중 ${m}곳`);
+  await expect.soft(cards, "검색 결과 카드(1쪽부터)").toHaveCount(m);
+  await expect.soft(section.getByRole("button", { name: "다음", exact: true }), "한 쪽이면 페이지 이동 없음").toHaveCount(0);
+
+  await section.getByRole("button", { name: "지우기", exact: true }).click();
+  await expect(section, "지우면 영역이 사라짐").toHaveCount(0);
+  expect(await page.evaluate((name) => caches.has(name), SAVED_CACHE), "지운 뒤 저장 캐시").toBe(false);
+  expect.soft(requests, "저장본 주소·API 요청").toEqual([]);
+  expect.soft(errors, "콘솔 오류·하이드레이션 경고").toEqual([]);
+});
