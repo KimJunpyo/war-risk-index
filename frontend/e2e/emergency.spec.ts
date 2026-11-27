@@ -1,7 +1,8 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { CIVIL_ALERTS } from "../src/entities/guide/model/alerts";
 import { GO_BAG_ITEMS, KIT_CALC_STORAGE_KEY, KIT_STORAGE_KEY, STOCK_ITEMS } from "../src/entities/guide/model/kit";
 import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
+import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/embassy-contacts/model/embassy";
 
 // 이슈 #74(1-4) /emergency 비상 대비 안내와 홈 헤더 진입 링크, #108(1-9) 첫 화면(경보 타일·미리 준비하기 카드) 실측. 기준 화면 폭(360·768·1080·1440)
 // 경보 내용은 이슈 #72 모델(CIVIL_ALERTS), 카드 값은 kit.ts 목록·저장 키와 인수 조건의 숫자를 그대로 쓴다. 소스 쪽 계약(토큰 색만·서버 컴포넌트·
@@ -34,6 +35,10 @@ import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 // - 가방·계산 영역: section#kit·section#calc 하나씩(내용 계약과 홈 체크리스트 카드의 /emergency#kit 링크는 emergency-kit.spec.ts)
 // - 키보드: Tab 순서 ← 전체 지도 → 경보 타일 5개(순서대로) → 가방 카드 → 물 카드 → #kit 첫 타일, Tab 으로 오면 포커스 표시(outline 또는 box-shadow).
 //   WebKit 은 Safari 기본 설정처럼 Tab 이 링크를 건너뛰어 Firefox 에서만 본다(footer.spec.ts 와 같음)
+// - 재외공관 연락처(#77): section#embassies(#calc 뒤). 서버가 GET /api/embassies 를 받아 HTML 에 넣는다(브라우저 요청 없음, 위 폭별 테스트가 확인).
+//   자바스크립트 실행 전 HTML 의 그 영역에 영사콜센터 해외 번호, <details> 가 응답 나라 수만큼(available false 면 0개, 단위 테스트는 embassy.test.ts).
+//   summary 글자는 나라 한국어 이름이고 문서 순서가 Intl.Collator("ko") 가나다순. "일본"을 펼치면 공관 li 1곳 이상, "대표 " 뒤 전화 링크는 tel:+81.
+//   영역 끝(마지막 자식)에 EMBASSY_SOURCE 이름 링크(href 같음)와 "수집일 {as_of}". 360·768 1열, 1080·1440 2열이고 펼쳐도 가로 넘침 없음
 // - 정적 페이지: 브라우저가 API 주소로 요청하지 않는다. 자바스크립트 실행 전 HTML(<script> 밖 body)에 경보 이름 5개와
 //   상세 링크 href="/emergency/<id>" 5개가 있다
 // - 홈 헤더(main 의 첫 header) 제목 줄에 접근 이름이 정확히 "비상 대비"인 링크 하나, href="/emergency".
@@ -78,6 +83,10 @@ const GUIDE_NAME = "가이드 · 여행경보 단계";
 const SCRIPT = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
 const TRANSPARENT = /^transparent$|^rgba\([^)]*,\s*0\)$|\/\s*0\)$/; // 계산된 색이 완전 투명(footer.spec.ts 와 같음)
 const BARS = 'progress, [role="progressbar"]'; // 진행 막대
+const EMBASSY = "section#embassies"; // 재외공관 영역(#77)
+const JAPAN = "일본";
+const JAPAN_TEL = "tel:+81"; // 일본 공관 대표 전화 링크 앞부분
+const EMBASSY_COLS = [1, 1, 2, 2]; // 폭 단계별 나라 접기 열 수(plan.md 7-4)
 const BAG_ROWS = [{ name: "3일 가방", total: GO_BAG_ITEMS.length }, { name: "7일 비축", total: STOCK_ITEMS.length }]; // 가방 카드 줄(목록 순서)
 // 저장값(인수 조건): 가방은 두 목록에서 하나씩 2개, 계산은 6명·14일 비축
 const SAVED_KIT = JSON.stringify([GO_BAG_ITEMS[0].id, STOCK_ITEMS[0].id]);
@@ -257,6 +266,52 @@ test("자바스크립트 실행 전 HTML: 경보 이름 5개·상세 링크 5개
   for (const w of DESCRIPTION_WORDS) expect.soft(description, `설명에 "${w}"`).toContain(w);
   expect.soft(metaOf(markup, "og:image"), "og:image(루트 파일 기반 이미지)").toMatch(/\/opengraph-image(?![\w-])/);
   expect.soft(body, "푸터(SiteFooter)").toMatch(/<footer\b/);
+});
+
+/** 테스트가 비교할 공관 묶음 응답(서버가 받는 것과 같은 API) */
+async function embassyBundle(request: APIRequestContext): Promise<EmbassyBundle> {
+  const res = await request.get(`${API_BASE_URL}/api/embassies`);
+  expect(res.status(), "/api/embassies 응답").toBe(200);
+  return res.json();
+}
+const countryOf = (page: Page, name: string) =>
+  page.locator(`${EMBASSY} details`).filter({ has: page.locator("summary", { hasText: new RegExp(`^${name}$`) }) });
+
+test("재외공관(자바스크립트 실행 전 HTML): 영사콜센터 해외 번호, 응답 나라 수만큼 <details>", async ({ request }) => {
+  const bundle = await embassyBundle(request);
+  const markup = (await (await request.get(PATH)).text()).replace(SCRIPT, "");
+  const start = markup.indexOf('id="embassies"');
+  expect(start, "section#embassies").toBeGreaterThan(0);
+  const section = markup.slice(start, markup.indexOf("<footer", start));
+  expect.soft(section, "영사콜센터 해외 번호").toContain(CALL_CENTER.tel_overseas);
+  expect.soft(section.match(/<details\b/g)?.length ?? 0, "나라 접기 수 = 응답 나라 수")
+    .toBe(bundle.available ? bundle.countries.length : 0);
+});
+
+test("재외공관: 나라 접기 가나다순(Intl.Collator ko), 일본 펼치면 공관 1곳 이상·대표 전화 tel:+81, 영역 끝 출처 링크·수집일", async ({ page, request }) => {
+  const bundle = await embassyBundle(request);
+  test.skip(!bundle.available, "공관 데이터 없음(백엔드 공공데이터 키 없음)");
+  await open(page);
+  await hydrated(page);
+  const names = await page.locator(`${EMBASSY} details > summary`).allTextContents();
+  expect.soft(names, "나라 수").toHaveLength(bundle.countries.length);
+  expect.soft(names, "가나다순").toEqual([...names].sort(new Intl.Collator("ko").compare));
+
+  const japan = countryOf(page, JAPAN);
+  await expect(japan, JAPAN).toHaveCount(1);
+  await japan.locator("summary").click();
+  await expect(japan, `${JAPAN} 펼침`).toHaveAttribute("open");
+  await expect.soft(japan.locator("li").first(), `${JAPAN} 공관`).toBeVisible();
+  // "대표 " 글자 바로 뒤의 링크 = 대표 전화(긴급 전화는 한국 번호일 수 있어 보지 않는다)
+  const tels = await japan.locator('a[href^="tel:"]').evaluateAll((els) =>
+    els.filter((a) => a.previousSibling?.textContent?.endsWith("대표 ")).map((a) => a.getAttribute("href")));
+  expect.soft(tels.length, `${JAPAN} 대표 전화 링크 수`).toBeGreaterThan(0);
+  expect.soft(tels.filter((h) => !h?.startsWith(JAPAN_TEL)), `${JAPAN_TEL} 로 시작하지 않는 대표 전화`).toEqual([]);
+
+  const last = page.locator(`${EMBASSY} > :last-child`);
+  const source = last.getByRole("link", { name: EMBASSY_SOURCE.name, exact: true });
+  await expect.soft(source, "출처 링크").toHaveAttribute("href", EMBASSY_SOURCE.url);
+  await expect.soft(last, "수집일").toContainText(`수집일 ${bundle.as_of}`);
 });
 
 test("sitemap.xml 에 <SITE_URL>/emergency", async ({ request }) => {
@@ -491,5 +546,19 @@ for (const width of WIDTHS) {
         await expect(page.getByRole("heading", { level: 1, name: H1, exact: true })).toBeVisible();
       });
     }
+  });
+}
+
+for (const width of WIDTHS) {
+  test(`${width}px 재외공관: 나라 접기 열 수, 일본을 펼쳐도 가로 넘침 없음`, async ({ page }) => {
+    await open(page, width);
+    await hydrated(page);
+    const items = page.locator(`${EMBASSY} details`);
+    test.skip(await items.count() === 0, "공관 데이터 없음(백엔드 공공데이터 키 없음)");
+    expect.soft(await columns(items), "나라 접기 열 수").toBe(EMBASSY_COLS[step(width)]);
+    const japan = countryOf(page, JAPAN);
+    await japan.locator("summary").click();
+    await expect(japan, `${JAPAN} 펼침`).toHaveAttribute("open");
+    await expectNoOverflow(page, `${JAPAN} 펼침`);
   });
 }

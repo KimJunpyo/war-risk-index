@@ -88,7 +88,8 @@ const HOME_LINK = "/emergency#kit";
 const GUIDE_BUTTON = "단계별 가이드"; // 홈 체크리스트 카드 안 버튼
 const CHECKLIST_SEED = '["supplies-3days"]'; // 홈 체크리스트에서 체크해 둔 값(가방 체크와 상관없이 그대로 남아야 함)
 // 개발 서버 도구(오류 오버레이·devtools 의 /__nextjs_*)와 HMR 요청은 운영에 없어 세지 않는다
-const DEV_ONLY = /\/(?:__nextjs|_next\/webpack-hmr)/;
+// 파비콘(/icon.svg·/apple-icon)은 페이지가 아니라 브라우저(Firefox)가 로드 뒤 제때 없이 받는 것이라 함께 세지 않는다
+const DEV_ONLY = /\/(?:__nextjs|_next\/webpack-hmr|icon\.svg|apple-icon)/;
 
 // 가구원 수·기간 → live 영역의 합계·1인당 글자
 type Case = { people: string; period: string; total: string; each: string };
@@ -134,6 +135,11 @@ async function expectNoOverflow(page: Page, label: string) {
 async function open(page: Page, width = WIDE) {
   await page.setViewportSize({ width, height: HEIGHT });
   await page.goto(PATH, { waitUntil: "networkidle" });
+  // Firefox 개발 서버는 networkidle 뒤에도 청크·글꼴을 늦게 받는다. 그 전에 누르면 하이드레이션 전이라 안 눌리고
+  // 늦은 요청이 "요청 0건" 테스트에 잡힌다. 계산기 인원 칸이 readOnly 를 벗으면(하이드레이션 끝) 글꼴까지 기다린다
+  await expect(peopleOf(calcOf(page))).not.toHaveAttribute("readonly");
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.waitForLoadState("networkidle");
 }
 
 const storedValue = (page: Page, key: string) => page.evaluate((k) => localStorage.getItem(k), key);
