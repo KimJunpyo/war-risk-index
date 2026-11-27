@@ -3,6 +3,7 @@ import { CIVIL_ALERTS } from "../src/entities/guide/model/alerts";
 import { GO_BAG_ITEMS, KIT_CALC_STORAGE_KEY, KIT_STORAGE_KEY, STOCK_ITEMS } from "../src/entities/guide/model/kit";
 import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/embassy-contacts/model/embassy";
+import { savedAtKst } from "../src/widgets/offline-status/model/saved-at";
 
 // 이슈 #74(1-4) /emergency 비상 대비 안내와 홈 헤더 진입 링크, #108(1-9) 첫 화면(경보 타일·미리 준비하기 카드) 실측. 기준 화면 폭(360·768·1080·1440)
 // 경보 내용은 이슈 #72 모델(CIVIL_ALERTS), 카드 값은 kit.ts 목록·저장 키와 인수 조건의 숫자를 그대로 쓴다. 소스 쪽 계약(토큰 색만·서버 컴포넌트·
@@ -33,7 +34,7 @@ import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/
 //   - 서버 HTML 은 기본값(0/7·0/8, 4명·7일 비축)이고 저장값은 하이드레이션 뒤에 반영한다(하이드레이션 경고 없음).
 //     아래 #kit 타일을 누르거나 #calc 의 −/+·기간 칩을 바꾸면 1초 안에 카드가 바뀐다. 카드를 누르면 주소에 #kit·#calc, 그 영역이 화면 안
 // - 가방·계산 영역: section#kit·section#calc 하나씩(내용 계약과 홈 체크리스트 카드의 /emergency#kit 링크는 emergency-kit.spec.ts)
-// - 키보드: Tab 순서 ← 전체 지도 → 경보 타일 5개(순서대로) → 가방 카드 → 물 카드 → #kit 첫 타일, Tab 으로 오면 포커스 표시(outline 또는 box-shadow).
+// - 키보드: Tab 순서 ← 전체 지도 → WebKit 문서 링크(#79) → 경보 타일 5개(순서대로) → 가방 카드 → 물 카드 → #kit 첫 타일, Tab 으로 오면 포커스 표시(outline 또는 box-shadow).
 //   WebKit 은 Safari 기본 설정처럼 Tab 이 링크를 건너뛰어 Firefox 에서만 본다(footer.spec.ts 와 같음)
 // - 재외공관 연락처(#77): section#embassies(#calc 뒤). 서버가 GET /api/embassies 를 받아 HTML 에 넣는다(브라우저 요청 없음, 위 폭별 테스트가 확인).
 //   자바스크립트 실행 전 HTML 의 그 영역에 영사콜센터 해외 번호, <details> 가 응답 나라 수만큼(available false 면 0개, 단위 테스트는 embassy.test.ts).
@@ -41,6 +42,12 @@ import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/
 //   영역 끝(마지막 자식)에 EMBASSY_SOURCE 이름 링크(href 같음)와 "수집일 {as_of}". 360·768 1열, 1080·1440 2열이고 펼쳐도 가로 넘침 없음
 // - 정적 페이지: 브라우저가 API 주소로 요청하지 않는다. 자바스크립트 실행 전 HTML(<script> 밖 body)에 경보 이름 5개와
 //   상세 링크 href="/emergency/<id>" 5개가 있다
+// - 저장 상태 줄(#79): main header 안 [role="status"] 하나. Cache Storage 의 /emergency 응답(어느 캐시 이름이든)의 date 헤더를
+//   한국 시각 "YYYY-MM-DD HH:mm"(savedAtKst)으로 쓴다. 온라인 "이 기기에 저장됨 · 저장 {시각}", 오프라인(offline 사건) 1초 안에
+//   "오프라인: 저장된 안내입니다 · 저장 {시각}", 다시 온라인이면 1초 안에 오프라인 글자가 사라진다.
+//   저장본이 없거나 서비스 워커를 지원하지 않으면(navigator 에 serviceWorker 없음) 그 줄이 없다.
+//   개발 서버에는 서비스 워커가 없어 테스트가 캐시에 저장본을 직접 넣는다(sw.js 의 저장·응답은 수동 확인)
+// - 아이폰 안내(#79): main header 안에 IOS_NOTICE 글자와 WebKit 추적 방지 문서 링크(href WEBKIT_DOC, 새 탭, rel 에 noreferrer)
 // - 홈 헤더(main 의 첫 header) 제목 줄에 접근 이름이 정확히 "비상 대비"인 링크 하나, href="/emergency".
 //   제목(h1)·LiveBadge·가이드 버튼과 같은 줄, 링크 글자도 한 줄, 헤더 내용 폭 안, 높이 24px 이상.
 //   좁은 폭에서는 아이콘만 보여도 된다(접근 이름은 모든 폭에서 같음)
@@ -102,6 +109,17 @@ const WATER = {
   saved: ["물 252L(약 252kg)", "6명 · 14일 비축", "2L 생수 6병 묶음 21팩"],
   max: ["물 840L(약 840kg)", "20명 · 14일 비축", "2L 생수 6병 묶음 70팩"],
 };
+
+// 저장 상태 줄(#79)
+const SW_CACHE = "wri-emergency-v1"; // public/sw.js 의 캐시 이름(화면은 이름 없이 찾으므로 버전이 올라도 테스트는 그대로 통과)
+const SAVED_DATE = "Fri, 27 Nov 2026 05:04:00 GMT"; // 저장본 응답의 date 헤더 → 한국 시각 2026-11-27 14:04
+const STATUS = 'main header [role="status"]';
+const SAVED_ONLINE = "이 기기에 저장됨";
+const SAVED_OFFLINE = "오프라인: 저장된 안내입니다";
+const STATUS_MS = 1_000; // offline·online 사건 뒤 줄이 바뀌기까지 한도(인수 조건 "1초 안에")
+const IOS_NOTICE = "아이폰·아이패드 Safari는 7일 넘게 이 사이트를 열지 않으면 저장본을 지울 수 있습니다. 공유 → 홈 화면에 추가하면 유지됩니다.";
+const WEBKIT_DOC = "https://webkit.org/tracking-prevention/";
+const NOREFERRER = /(^|\s)noreferrer(\s|$)/;
 
 // LiveBadge 상태 고정: /api/live 응답의 as_of 를 지금보다 agoMs 이전 슬롯으로 바꾼다(45분이 넘으면 지연).
 // 배지 글자가 상태마다 달라 신선 상태와 글자가 가장 긴 지연 상태를 본다
@@ -198,6 +216,17 @@ async function open(page: Page, width = NARROW, height = HEIGHT) {
 
 /** 하이드레이션 끝을 알리는 요소가 없어 네트워크가 잠잠해질 때까지 기다린다(그 전 누름·저장값은 React 가 받지 못함) */
 const hydrated = (page: Page) => page.waitForLoadState("networkidle");
+
+/** 서비스 워커가 저장한 것처럼 Cache Storage 에 date 헤더를 단 /emergency 응답을 넣고 새로 고친다.
+ *  Playwright WebKit(임시 프로필)은 이동하면 캐시 항목이 사라져 문서마다 init 스크립트로 넣는다(화면은 하이드레이션 뒤에 읽어 그 전에 끝남) */
+async function reloadWithSaved(page: Page, date = SAVED_DATE) {
+  await page.addInitScript(([name, path, d]) => {
+    void caches.open(name).then((cache) =>
+      cache.put(path, new Response("<!doctype html>", { headers: { "content-type": "text/html", date: d } })));
+  }, [SW_CACHE, PATH, date]);
+  await page.reload();
+  await hydrated(page);
+}
 
 /** 담기·계산 저장값을 넣고 새로 고친다 */
 async function reloadWith(page: Page, kit: string, calc: string) {
@@ -372,6 +401,48 @@ test("경보 타일: h2 아래 /emergency/<id> 링크 5개(CIVIL_ALERTS 순서)�
   }
 });
 
+test("아이폰 안내(#79): 머리말에 안내 문구와 WebKit 추적 방지 문서 링크(새 탭·noreferrer)", async ({ page }) => {
+  await open(page);
+  const header = page.locator("main header");
+  await expect.soft(header, "아이폰 안내 문구").toContainText(IOS_NOTICE);
+  const link = header.locator(`a[href="${WEBKIT_DOC}"]`);
+  await expect(link, "WebKit 문서 링크 하나").toHaveCount(1);
+  await expect.soft(link, "새 탭").toHaveAttribute("target", "_blank");
+  await expect.soft(link, "rel 에 noreferrer").toHaveAttribute("rel", NOREFERRER);
+});
+
+test("저장 상태 줄(#79): 저장본 없으면 없음 → 저장본(date 헤더)이 있으면 한국 시각, offline 1초 안에 오프라인 안내, online 이면 사라짐", async ({ page, context }) => {
+  await open(page);
+  await hydrated(page);
+  await expect.soft(page.locator(STATUS), "저장본 없음: 저장 상태 줄").toHaveCount(0);
+
+  await reloadWithSaved(page);
+  const savedAt = savedAtKst(SAVED_DATE);
+  expect(savedAt, "date 헤더 → 한국 시각").toBe("2026-11-27 14:04");
+  const status = page.locator(STATUS);
+  await expect(status, "온라인 저장 상태 줄").toHaveText(`${SAVED_ONLINE} · 저장 ${savedAt}`);
+
+  await context.setOffline(true);
+  await expect(status, "offline 뒤 1초 안에 오프라인 안내").toHaveText(`${SAVED_OFFLINE} · 저장 ${savedAt}`, { timeout: STATUS_MS });
+  await context.setOffline(false);
+  await expect(status, "online 뒤 1초 안에 오프라인 안내 사라짐").toHaveText(`${SAVED_ONLINE} · 저장 ${savedAt}`, { timeout: STATUS_MS });
+  await expect.soft(page.locator("main"), "온라인에서 오프라인 글자").not.toContainText(SAVED_OFFLINE);
+});
+
+test("저장 상태 줄(#79): 서비스 워커를 지원하지 않으면 저장본이 있어도 없음(오프라인이어도)", async ({ page, context }) => {
+  await open(page);
+  await page.addInitScript(() => {
+    delete (Navigator.prototype as { serviceWorker?: unknown }).serviceWorker;
+  });
+  await reloadWithSaved(page);
+  expect(await page.evaluate(() => "serviceWorker" in navigator), "서비스 워커 미지원 흉내").toBe(false);
+  expect(await page.evaluate(async (p) => !!(await caches.match(p)), PATH), "저장본은 있음").toBe(true);
+  await expect.soft(page.locator(STATUS), "온라인: 저장 상태 줄").toHaveCount(0);
+  await context.setOffline(true);
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 500))); // offline 사건 뒤 다시 그릴 시간
+  await expect.soft(page.locator(STATUS), "오프라인: 저장 상태 줄").toHaveCount(0);
+});
+
 test("360×800: 스크롤하기 전에 경보 타일 5개가 모두 화면 안", async ({ page }) => {
   await open(page, FOLD.width, FOLD.height);
   await expect(tilesOf(page), "경보 타일 수").toHaveCount(CIVIL_ALERTS.length);
@@ -442,12 +513,13 @@ test(`저장값(${KIT_STORAGE_KEY} 2개·${KIT_CALC_STORAGE_KEY} 6명·14일 비
   expect.soft(errors, "콘솔 오류·하이드레이션 경고").toEqual([]);
 });
 
-test("키보드: Tab 순서 ← 전체 지도 → 경보 타일 5개 → 가방 카드 → 물 카드 → 가방 첫 타일, Tab 으로 오면 포커스 표시", async ({ page, browserName }) => {
+test("키보드: Tab 순서 ← 전체 지도 → WebKit 문서 링크(#79) → 경보 타일 5개 → 가방 카드 → 물 카드 → 가방 첫 타일, Tab 으로 오면 포커스 표시", async ({ page, browserName }) => {
   test.skip(browserName === "webkit", "WebKit 은 Tab 으로 링크에 포커스하지 않음(footer.spec.ts 와 같음)");
   await open(page);
   await hydrated(page);
   const targets = [
     { name: HOME_LINK, el: page.getByRole("link", { name: /전체 지도/ }) },
+    { name: "WebKit 문서 링크", el: page.locator(`main header a[href="${WEBKIT_DOC}"]`) },
     ...CIVIL_ALERTS.map((a) => ({ name: `${a.name} 타일`, el: tileOf(page, a.id) })),
     { name: "가방 카드", el: bagCardOf(page) },
     { name: "물 카드", el: waterCardOf(page) },
