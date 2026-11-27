@@ -55,7 +55,8 @@ BACKUP_KEEP = 7  # 날짜 백업을 이만큼 남긴다
 KST = timezone(timedelta(hours=9))  # 백업 날짜의 시간대(워크플로 TZ 와 같음)
 # 받기 때 out/api 로 미리 받는 지난 응답. 공공데이터 응답(available 값이 있는 것)은 빈 러너에서도 publish 의 공공데이터 유실
 # 가드가 작동하게, 뉴스(news/*)는 뉴스 단계가 그 mtime 으로 다시 받을 때를 정하고 실패한 대상의 지난 값을 그대로 두게(#54)
-GUARDED_API = ("shelters/meta.json", "shelters/regions.json", "countries/*/embassies.json", f"{publish.NEWS_DIR}/*")
+GUARDED_API = ("shelters/meta.json", "shelters/regions.json", "embassies.json", "countries/*/embassies.json",
+               f"{publish.NEWS_DIR}/*")
 ENDPOINT_ENV, BUCKET_ENV = "R2_ENDPOINT_URL", "R2_BUCKET"
 R2_ENV = (ENDPOINT_ENV, BUCKET_ENV, "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")  # 키 두 개는 aws CLI 가 직접 읽는다
 REGION = "auto"  # R2 는 region 을 auto 로 받는다

@@ -27,6 +27,7 @@ const ROUTES: [string, string, string][] = [
   ["/api/cases", "api/cases.json", DAILY],
   ["/api/blend", "api/blend.json", DAILY],
   ["/api/shelters/regions", "api/shelters/regions.json", DAILY],
+  ["/api/embassies", "api/embassies.json", DAILY],
   ["/api/pairs/KOR-PRK/index", "api/pairs/KOR-PRK/index.json", DAILY],
   ["/api/pairs/KOR-PRK/catalysts", "api/pairs/KOR-PRK/catalysts.json", DAILY],
   ["/api/countries/KOR/index", "api/countries/KOR/index.json", DAILY],
@@ -99,10 +100,19 @@ describe("라우팅", () => {
     expect(await res.json()).toStrictEqual(NOT_FOUND);
   });
 
+  it("고정 경로의 파일이 아직 없으면 404 Not Found: /api/embassies", async () => {
+    await env.BUCKET.delete("api/embassies.json");
+    const res = await request("/api/embassies");
+    await env.BUCKET.put("api/embassies.json", body("api/embassies.json")); // 다른 테스트를 위해 되돌린다
+    expect(res.status).toBe(404);
+    expect(await res.json()).toStrictEqual(NOT_FOUND);
+  });
+
   it.each([
     ["POST", "/api/pairs"],
     ["HEAD", "/api/pairs"],
     ["POST", "/api/health"],
+    ["POST", "/api/embassies"],
   ])("허용하지 않는 메서드는 405: %s %s", async (method, path) => {
     const res = await request(path, { method });
     expect(res.status).toBe(405);
