@@ -2,6 +2,9 @@ import { expect, test, type APIRequestContext, type BrowserContext, type Page } 
 import { CIVIL_ALERTS } from "../src/entities/guide/model/alerts";
 import { API_BASE_URL } from "../src/shared/config/env";
 import type { EmbassyBundle } from "../src/widgets/embassy-contacts/model/embassy";
+import type { ShelterResult } from "../src/entities/shelter/model/types";
+import { filterShelters } from "../src/widgets/nearby-shelters/model/results";
+import { SAVED_CACHE, savedAtText, savedKey, type SavedShelters } from "../src/widgets/nearby-shelters/model/saved";
 
 // 이슈 #80(2-5) /emergency 오프라인 저장(서비스 워커 #78) 실측. Chromium·프로덕션 서버 전용: npm run e2e:offline(playwright.offline.config.ts).
 // 기본 설정(npm run e2e, Firefox·WebKit)은 이 파일을 testIgnore 로 뺀다.
@@ -17,6 +20,12 @@ const STOCK7 = "7일 비축";
 const ONE = { people: "1", water: "21L" }; // 1명·7일 비축: 계산이 실제로 도는지 보려고 기본값(4명)과 다른 값을 먼저 넣는다
 const FOUR = { people: "4", water: "84L" }; // 4명·7일 비축(인수 조건)
 const FORBIDDEN = ["/api/", "lat="]; // Cache Storage 에 있으면 안 되는 주소 조각(인수 조건)
+// 저장한 대피소(#81): 홈에서 지역으로 찾아 저장한 결과를 오프라인 /emergency 에서 본다
+const CHANGWON = { sido: "경상남도", sigungu: "창원시" };
+const CHANGWON_REGION = `${CHANGWON.sido} ${CHANGWON.sigungu}`;
+const SCHOOL = "초등학교";
+const SAVED_SECTION = "section#saved-shelters";
+const OLD_CACHE = "wri-emergency-v1"; // 지난 버전 서비스 워커 캐시(activate 가 지워야 함)
 
 const tilesOf = (page: Page) => page.locator(CIVIL_ALERTS.map((a) => `main a[href="${PATH}/${a.id}"]`).join(", "));
 const calcOf = (page: Page) => page.locator("#calc");
@@ -51,6 +60,33 @@ async function embassyBundle(request: APIRequestContext): Promise<EmbassyBundle>
   const res = await request.get(`${API_BASE_URL}/api/embassies`);
   expect(res.status(), "/api/embassies 응답").toBe(200);
   return res.json();
+}
+
+/** 저장 캐시의 항목(키 주소·본문) */
+const savedEntries = (page: Page) => page.evaluate(async (name) => {
+  if (!(await caches.has(name))) return [];
+  const cache = await caches.open(name);
+  return Promise.all((await cache.keys()).map(async (req) => ({ url: req.url, body: await (await cache.match(req))!.json() })));
+}, SAVED_CACHE) as Promise<{ url: string; body: SavedShelters }[]>;
+
+/** 홈 대피소 위젯에서 창원시를 지역으로 찾아 "이 기기에 저장"을 누른다. 화면이 받은 응답을 돌려준다.
+ *  백엔드 CORS 는 개발 서버 출처(3000)만 허용해 이 설정의 3100 에서는 홈 API 가 막힌다(대피소 위젯은 한국 선택 뒤에 그려져 홈 API 가 다 필요).
+ *  그래서 홈 API 를 테스트가 대신 받아 허용 헤더를 붙인다 */
+async function saveChangwon(page: Page): Promise<ShelterResult> {
+  await page.route(`${API_BASE_URL}/api/**`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, headers: { ...response.headers(), "access-control-allow-origin": "*" } });
+  });
+  await page.reload(); // 첫 화면의 지역 목록 요청은 route 전에 막혔으므로 다시 받는다
+  const widget = page.getByRole("heading", { name: "내 주변 대피소", exact: true }).locator("xpath=ancestor::section[1]");
+  await widget.getByRole("button", { name: "지역으로 찾기", exact: true }).click();
+  await widget.locator('select[aria-label="시·도"]').selectOption(CHANGWON.sido);
+  const res = page.waitForResponse((r) => new URL(r.url()).searchParams.get("region") === CHANGWON_REGION);
+  await widget.locator('select[aria-label="시·군·구"]').selectOption(CHANGWON.sigungu);
+  const data: ShelterResult = await (await res).json();
+  await widget.getByRole("button", { name: "이 기기에 저장", exact: true }).click();
+  await expect(widget.getByRole("status").filter({ hasText: "저장했습니다" }), "저장 안내").toHaveCount(1);
+  return data;
 }
 
 test.describe.configure({ timeout: TEST_TIMEOUT_MS });
@@ -99,4 +135,60 @@ test(`Cache Storage 키에 ${FORBIDDEN.join("·")} 0건`, async ({ page, context
   });
   expect(urls.length, "저장된 항목(0이면 확인이 안 된 것)").toBeGreaterThan(0);
   expect(urls.filter((u) => FORBIDDEN.some((f) => u.includes(f))), "API·좌표 주소").toEqual([]);
+});
+
+test(`저장한 대피소(#81): 홈에서 ${CHANGWON_REGION} 저장 → 오프라인 /emergency 에 지역·저장 시각·total·"${SCHOOL}" 검색, 지우기면 캐시·영역 없음`, async ({ page, context }) => {
+  await install(page);
+  const data = await saveChangwon(page);
+  const [entry, ...rest] = await savedEntries(page);
+  expect(rest, "저장 항목은 하나").toEqual([]);
+  expect(new URL(entry.url).pathname, "키 주소 = savedKey(지역)").toBe(savedKey(CHANGWON_REGION));
+  expect.soft(decodeURIComponent(entry.url), "키에 좌표·lat= 없음").not.toMatch(/lat=|\?|\d+\.\d{2,}/);
+
+  // 화면이 저장본 주소를 네트워크로 부르지 않는다(서비스 워커를 거친 요청도 context 에 잡힌다)
+  const fetched: string[] = [];
+  context.on("request", (r) => {
+    if (r.url().includes("/saved-shelters")) fetched.push(r.url());
+  });
+  await page.goto(PATH);
+  await hydrated(page);
+  await context.setOffline(true);
+  await page.reload();
+  await hydrated(page);
+
+  const section = page.locator(SAVED_SECTION);
+  await expect(section.getByRole("heading", { name: "저장한 대피소", exact: true })).toBeVisible();
+  await expect.soft(section, "지역 이름·저장 시각").toContainText(`${CHANGWON_REGION} · 저장 ${savedAtText(entry.body.savedAt)}`);
+  await expect.soft(section, "저장할 때와 같은 total").toContainText(`총 ${data.total.toLocaleString("ko-KR")}곳`);
+  const m = filterShelters(data.items, SCHOOL).length;
+  expect(m, `"${SCHOOL}" 결과가 있어야 검색 확인`).toBeGreaterThan(0);
+  await section.getByRole("searchbox", { name: "결과에서 찾기", exact: true }).fill(SCHOOL);
+  await expect.soft(section, "오프라인 검색 건수").toContainText(`총 ${data.total.toLocaleString("ko-KR")}곳 중 ${m.toLocaleString("ko-KR")}곳`);
+  await expect.soft(section.locator("li").first(), "검색 결과 첫 카드").toContainText(SCHOOL);
+
+  await section.getByRole("button", { name: "지우기", exact: true }).click();
+  await expect(section, "지우면 영역이 사라짐").toHaveCount(0);
+  expect(await savedEntries(page), "지운 뒤 저장 항목").toEqual([]);
+  await page.reload();
+  await hydrated(page);
+  await expect.soft(section, "새로 고쳐도 영역 없음").toHaveCount(0);
+  expect.soft(fetched, "저장본 주소 요청").toEqual([]);
+});
+
+test("서비스 워커 activate: 저장한 대피소 캐시는 남고 지난 버전 캐시는 지운다(#81)", async ({ page }) => {
+  // 서비스 워커를 등록하지 않는 같은 출처 문서에서 지난 버전 서비스 워커가 남긴 것처럼 캐시를 만든 뒤 설치한다
+  await page.goto("/manifest.webmanifest");
+  const key = savedKey(CHANGWON_REGION);
+  await page.evaluate(async ([saved, old, k]) => {
+    await (await caches.open(saved)).put(k, new Response("{}", { headers: { "content-type": "application/json" } }));
+    await (await caches.open(old)).put("/emergency", new Response("old"));
+  }, [SAVED_CACHE, OLD_CACHE, key]);
+  await install(page);
+  await expect.poll(() => page.evaluate(() => caches.keys()), { message: "activate 뒤 캐시 이름" }).not.toContain(OLD_CACHE);
+  const names = await page.evaluate(() => caches.keys());
+  expect(names, "저장한 대피소 캐시 남음").toContain(SAVED_CACHE);
+  expect(await page.evaluate(async ([n, k]) => !!(await (await caches.open(n)).match(k)), [SAVED_CACHE, key]), "저장 항목 남음").toBe(true);
+  // #79 상태 줄은 이름 없이 caches.match("/emergency") 로 찾는다: 저장 캐시와 섞이지 않고 서비스 워커 저장본이 나온다
+  const hit = await page.evaluate(async () => (await caches.match("/emergency"))?.headers.get("content-type") ?? null);
+  expect(hit, 'caches.match("/emergency") = 서비스 워커 저장본(HTML)').toContain("text/html");
 });

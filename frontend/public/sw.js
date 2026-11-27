@@ -1,8 +1,13 @@
 // /emergency 오프라인 저장용 서비스 워커(이슈 #78, plan.md 7-1). 라이브러리 없이 직접 쓴다.
 // 위치에서 나온 정보와 API 응답은 저장하지 않는다: 다른 출처·/api/·좌표가 든 주소는 respondWith 를 부르지 않는다.
 
-// 내용을 바꾸면 버전을 올린다. activate 에서 이 이름이 아닌 캐시는 지운다(영숫자 32자 이상 해시 금지)
-const CACHE = "wri-emergency-v1";
+// 내용을 바꾸면 버전을 올린다. activate 에서 이 이름과 SAVED 가 아닌 캐시는 지운다(영숫자 32자 이상 해시 금지)
+// v2(#81): activate 가 저장한 대피소(SAVED)를 남기게 바뀌어 올린다. 규칙대로 v1 캐시(예전 정적 파일)는 이 activate 가 지운다
+const CACHE = "wri-emergency-v2";
+// 사용자가 "이 기기에 저장"으로 남긴 지역 대피소(widgets/nearby-shelters/model/saved.ts 의 SAVED_CACHE, 이슈 #81).
+// 버전을 붙이지 않고 activate 가 지우지 않는다: 지우면 다음 버전 서비스 워커가 사용자가 저장한 데이터를 없앤다.
+// 화면이 caches 로 직접 읽고 쓰며 fetch 로 부르지 않는다(키 /saved-shelters/... 는 아래 fetch 의 저장본 경로에 걸리지 않음)
+const SAVED = "wri-saved-shelters";
 const PAGE = "/emergency";
 const EXTRA = ["/manifest.webmanifest", "/icon.svg"];
 // HTML 이 가리키는 정적 파일(JS·CSS·글꼴). 인라인 RSC 데이터의 \" 이스케이프 앞에서 끊는다
@@ -30,7 +35,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    for (const key of await caches.keys()) if (key !== CACHE) await caches.delete(key);
+    for (const key of await caches.keys()) if (key !== CACHE && key !== SAVED) await caches.delete(key);
     await self.clients.claim();
   })());
 });

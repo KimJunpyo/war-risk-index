@@ -4,6 +4,9 @@ import { GO_BAG_ITEMS, KIT_CALC_STORAGE_KEY, KIT_STORAGE_KEY, STOCK_ITEMS } from
 import { API_BASE_URL, SITE_URL } from "../src/shared/config/env";
 import { CALL_CENTER, EMBASSY_SOURCE, type EmbassyBundle } from "../src/widgets/embassy-contacts/model/embassy";
 import { savedAtKst } from "../src/widgets/offline-status/model/saved-at";
+import { filterShelters } from "../src/widgets/nearby-shelters/model/results";
+import { SAVED_CACHE, savedAtText, savedKey, type SavedShelters } from "../src/widgets/nearby-shelters/model/saved";
+import type { Shelter } from "../src/entities/shelter/model/types";
 
 // 이슈 #74(1-4) /emergency 비상 대비 안내와 홈 헤더 진입 링크, #108(1-9) 첫 화면(경보 타일·미리 준비하기 카드) 실측. 기준 화면 폭(360·768·1080·1440)
 // 경보 내용은 이슈 #72 모델(CIVIL_ALERTS), 카드 값은 kit.ts 목록·저장 키와 인수 조건의 숫자를 그대로 쓴다. 소스 쪽 계약(토큰 색만·서버 컴포넌트·
@@ -47,6 +50,9 @@ import { savedAtKst } from "../src/widgets/offline-status/model/saved-at";
 //   "오프라인: 저장된 안내입니다 · 저장 {시각}", 다시 온라인이면 1초 안에 오프라인 글자가 사라진다.
 //   저장본이 없거나 서비스 워커를 지원하지 않으면(navigator 에 serviceWorker 없음) 그 줄이 없다.
 //   개발 서버에는 서비스 워커가 없어 테스트가 캐시에 저장본을 직접 넣는다(sw.js 의 저장·응답은 수동 확인)
+// - 저장한 대피소(#81): 저장본(Cache Storage SAVED_CACHE 의 savedKey(지역) 항목)이 있을 때만 section#saved-shelters(#embassies 뒤).
+//   제목 "저장한 대피소", 지역 이름과 "저장 {savedAtText}", 건수 "총 N곳"(N = total), 검색창 "결과에서 찾기"("총 N곳 중 M곳"),
+//   10곳이 넘으면 "이전"·"다음"과 "n / m". "지우기"를 누르면 캐시가 없어지고 영역이 사라진다. 브라우저 요청 없이 캐시에서만 읽는다
 // - 아이폰 안내(#79): main header 안에 IOS_NOTICE 글자와 WebKit 추적 방지 문서 링크(href WEBKIT_DOC, 새 탭, rel 에 noreferrer)
 // - 홈 헤더(main 의 첫 header) 제목 줄에 접근 이름이 정확히 "비상 대비"인 링크 하나, href="/emergency".
 //   제목(h1)·LiveBadge·가이드 버튼과 같은 줄, 링크 글자도 한 줄, 헤더 내용 폭 안, 높이 24px 이상.
@@ -111,7 +117,7 @@ const WATER = {
 };
 
 // 저장 상태 줄(#79)
-const SW_CACHE = "wri-emergency-v1"; // public/sw.js 의 캐시 이름(화면은 이름 없이 찾으므로 버전이 올라도 테스트는 그대로 통과)
+const SW_CACHE = "wri-emergency-v2"; // public/sw.js 의 캐시 이름(화면은 이름 없이 찾으므로 버전이 올라도 테스트는 그대로 통과)
 const SAVED_DATE = "Fri, 27 Nov 2026 05:04:00 GMT"; // 저장본 응답의 date 헤더 → 한국 시각 2026-11-27 14:04
 const STATUS = 'main header [role="status"]';
 const SAVED_ONLINE = "이 기기에 저장됨";
@@ -119,6 +125,27 @@ const SAVED_OFFLINE = "오프라인: 저장된 안내입니다";
 const STATUS_MS = 1_000; // offline·online 사건 뒤 줄이 바뀌기까지 한도(인수 조건 "1초 안에")
 const IOS_NOTICE = "아이폰·아이패드 Safari는 7일 넘게 이 사이트를 열지 않으면 저장본을 지울 수 있습니다. 공유 → 홈 화면에 추가하면 유지됩니다.";
 const WEBKIT_DOC = "https://webkit.org/tracking-prevention/";
+
+// 저장한 대피소(#81). 모의 저장본: 12곳(2쪽), 그중 3곳이 "초등학교"
+const SAVED_SECTION = "section#saved-shelters";
+const SAVED_REGION = "경상남도 창원시";
+const SAVED_ISO = "2026-11-27T05:04:00.000Z"; // → 한국 시각 2026-11-27 14:04
+const SAVED_TOTAL = 12;
+const SCHOOL = "초등학교";
+const SAVED_ITEMS: Shelter[] = Array.from({ length: SAVED_TOTAL }, (_, i) => ({
+  name: i % 4 === 0 ? `창원${i}${SCHOOL}` : `창원 대피소 ${i}`,
+  address: `경상남도 창원시 의창구 ${i}번길`,
+  lat: 35.2,
+  lon: 128.6,
+  distance_m: null,
+  capacity: 100 + i,
+  kind: "공공용시설",
+}));
+const SAVED_BODY: SavedShelters = {
+  region: SAVED_REGION,
+  savedAt: SAVED_ISO,
+  result: { available: true, as_of: "2026-11-10", items: SAVED_ITEMS, total: SAVED_TOTAL },
+};
 const NOREFERRER = /(^|\s)noreferrer(\s|$)/;
 
 // LiveBadge 상태 고정: /api/live 응답의 as_of 를 지금보다 agoMs 이전 슬롯으로 바꾼다(45분이 넘으면 지연).
@@ -224,6 +251,15 @@ async function reloadWithSaved(page: Page, date = SAVED_DATE) {
     void caches.open(name).then((cache) =>
       cache.put(path, new Response("<!doctype html>", { headers: { "content-type": "text/html", date: d } })));
   }, [SW_CACHE, PATH, date]);
+  await page.reload();
+  await hydrated(page);
+}
+
+/** 홈에서 저장한 것처럼 대피소 저장본을 넣고 새로 고친다. WebKit 이 이동하면 캐시 항목을 잃어 reloadWithSaved 와 같이 init 스크립트로 넣는다 */
+async function reloadWithShelters(page: Page) {
+  await page.addInitScript(([name, key, body]) => {
+    void caches.open(name).then((cache) => cache.put(key, new Response(body, { headers: { "content-type": "application/json" } })));
+  }, [SAVED_CACHE, savedKey(SAVED_REGION), JSON.stringify(SAVED_BODY)]);
   await page.reload();
   await hydrated(page);
 }
@@ -634,3 +670,39 @@ for (const width of WIDTHS) {
     await expectNoOverflow(page, `${JAPAN} 펼침`);
   });
 }
+
+test("저장한 대피소(#81): 저장본이 없으면 영역 없음 → 있으면 지역·저장 시각·총 N곳·검색·쪽 이동, 지우기면 캐시·영역이 없어짐, 요청·하이드레이션 경고 0건", async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await hydrated(page);
+  await expect.soft(page.locator(SAVED_SECTION), "저장본 없음: 영역").toHaveCount(0);
+
+  await reloadWithShelters(page);
+  const requests: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/saved-shelters") || isApi(r.url())) requests.push(r.url());
+  });
+  const section = page.locator(SAVED_SECTION);
+  await expect(section.getByRole("heading", { name: "저장한 대피소", exact: true })).toBeVisible();
+  expect(savedAtText(SAVED_ISO), "ISO → 한국 시각").toBe("2026-11-27 14:04");
+  await expect.soft(section, "지역 이름·저장 시각").toContainText(`${SAVED_REGION} · 저장 2026-11-27 14:04`);
+  await expect.soft(section, "건수").toContainText(`총 ${SAVED_TOTAL}곳`);
+  const cards = section.locator("li");
+  await expect.soft(cards, "1쪽 카드").toHaveCount(10);
+  await expect.soft(section, "쪽 위치").toContainText("1 / 2");
+  await section.getByRole("button", { name: "다음", exact: true }).click();
+  await expect.soft(cards, "2쪽 카드").toHaveCount(SAVED_TOTAL - 10);
+
+  const search = section.getByRole("searchbox", { name: "결과에서 찾기", exact: true });
+  await search.fill(SCHOOL);
+  const m = filterShelters(SAVED_ITEMS, SCHOOL).length;
+  await expect.soft(section, "검색 건수").toContainText(`총 ${SAVED_TOTAL}곳 중 ${m}곳`);
+  await expect.soft(cards, "검색 결과 카드(1쪽부터)").toHaveCount(m);
+  await expect.soft(section.getByRole("button", { name: "다음", exact: true }), "한 쪽이면 페이지 이동 없음").toHaveCount(0);
+
+  await section.getByRole("button", { name: "지우기", exact: true }).click();
+  await expect(section, "지우면 영역이 사라짐").toHaveCount(0);
+  expect(await page.evaluate((name) => caches.has(name), SAVED_CACHE), "지운 뒤 저장 캐시").toBe(false);
+  expect.soft(requests, "저장본 주소·API 요청").toEqual([]);
+  expect.soft(errors, "콘솔 오류·하이드레이션 경고").toEqual([]);
+});

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ALERT_ICON, CIVIL_ALERTS } from "@/entities/guide";
 import { Icon } from "@/shared/ui";
 import { KitCalculator, KitChecklist, KitSummary } from "@/widgets/emergency-kit";
+import { SavedShelters } from "@/widgets/nearby-shelters";
 import { OfflineStatus } from "@/widgets/offline-status";
 import { SiteFooter } from "@/widgets/site-footer";
 import { ALERT_COLOR, ALERT_TILE } from "./alert-color";
@@ -22,9 +23,9 @@ const EMBASSY = { id: "embassies", name: "재외공관 연락처" };
 const WEBKIT_STORAGE_DOC = "https://webkit.org/tracking-prevention/";
 
 /** 비상 대비 안내 첫 화면: 머리말 → "지금 어떤 경보인가요?" 경보 타일 5개(→ 경보 상세) → "미리 준비하기" 카드(가방 진행·우리 집 물)
- *  → 비상 가방 → 물·식량 계산 → 재외공관 연락처 → 푸터. 행동요령 문장·출처는 상세의 "더 보기"에 있다. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은
+ *  → 비상 가방 → 물·식량 계산 → 재외공관 연락처 → 저장한 대피소(#81, 저장본이 있을 때만) → 푸터. 행동요령 문장·출처는 상세의 "더 보기"에 있다. 정적 페이지라 API 를 부르는 위젯(홈 데이터 위젯 등)은
  *  두지 않는다(준비 카드·가방 담기·계산기는 브라우저 안에서만 동작하는 클라이언트 위젯, 푸터는 정적 출처 목록만 그림).
- *  재외공관만 서버에서 받아 HTML 에 넣고 하루 단위로 다시 만든다(#77, 브라우저 요청 없음) */
+ *  재외공관만 서버에서 받아 HTML 에 넣고 하루 단위로 다시 만든다(#77, 브라우저 요청 없음). 저장한 대피소는 Cache Storage 에서만 읽는다 */
 export function EmergencyPage() {
   return (
     <main className="mx-auto w-full max-w-page px-4 py-6 md:px-6 md:py-8 lg:px-8">
@@ -82,6 +83,8 @@ export function EmergencyPage() {
         <h2 id="embassies-title" className={SECTION_TITLE}>{EMBASSY.name}</h2>
         <EmbassyDirectory />
       </section>
+
+      <SavedShelters titleClassName={SECTION_TITLE} />
 
       <SiteFooter />
     </main>
