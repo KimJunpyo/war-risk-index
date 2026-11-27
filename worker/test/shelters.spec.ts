@@ -21,9 +21,8 @@ const META_KEY = "api/shelters/meta.json";
 const META = files[META_KEY] as { available: boolean; as_of: string | null };
 const EMPTY = { ...META, items: [], total: 0 }; // 목록에 없는 지역·경로 주입의 응답
 const UNAVAILABLE = { available: false, as_of: null, items: [], total: 0 }; // 공공데이터 키가 없을 때 main 의 응답
-const PRIVATE = "private, max-age=3600"; // 좌표 검색: 위치가 든 URL 의 응답을 공유 캐시에 두지 않는다
 const PUBLIC = "public, max-age=3600";
-const NO_STORE = "no-store"; // 빈 결과는 캐시하지 않는다
+const NO_STORE = "no-store"; // 빈 결과와 좌표 검색(위치가 든 URL)은 브라우저에도 남기지 않는다
 const FIELDS = ["name", "address", "lat", "lon", "distance_m", "capacity", "kind"]; // main.SHELTER_FIELDS 순서
 const NEED = { detail: "lat·lon 또는 region 이 필요함" };
 const BAD_COORD = { detail: "lat·lon 은 소수점 2자리까지의 숫자만 지원함" };
@@ -91,7 +90,7 @@ describe("좌표 검색: main.list_shelters 와 같다", () => {
     const res = await request(toQuery(query));
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/json");
-    expect(res.headers.get("Cache-Control")).toBe(expected.total ? PRIVATE : NO_STORE);
+    expect(res.headers.get("Cache-Control")).toBe(NO_STORE); // 결과가 있어도 위치가 든 응답은 저장하지 않는다(#92)
     const body = await res.json<Body>();
     const distances = body.items.map((s) => s.distance_m!);
     expect(distances).toStrictEqual(distances.toSorted((a, b) => a - b)); // tieOrder 가 거리순으로 다시 정렬하므로 따로 본다
@@ -108,7 +107,7 @@ describe("좌표 검색: main.list_shelters 와 같다", () => {
   it("lat·lon 이 둘 다 있으면 region 이 있어도 좌표 검색이다", async () => {
     const [query, expected] = coords[0];
     const res = await request(`${toQuery(query)}&region=${encodeURIComponent("부산광역시 서구")}`);
-    expect(res.headers.get("Cache-Control")).toBe(PRIVATE);
+    expect(res.headers.get("Cache-Control")).toBe(NO_STORE);
     expect((await res.json<Body>()).total).toBe(expected.total);
   });
 

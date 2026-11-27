@@ -56,8 +56,6 @@ const TILE_SCALE = 20; // publish.TILE_SCALE: 0.05° 격자, 타일 키 = floor(
 const DEG_TO_RAD = Math.PI / 180; // Python math.radians 와 같은 계수(x × (π/180))
 // 시·도·시·군·구에 이 글자가 있으면 R2 를 읽지 않는다(다른 키를 가리키지 못하게)
 const UNSAFE_REGION = /[/\\]|\.\.|\p{Cc}/u;
-// 결과가 있을 때만 캐시한다. 빈 결과(공공데이터가 잠시 빠졌거나 없는 지역)는 no-store 라 다음 갱신 뒤 바로 바뀐다
-const NEARBY_CACHE = `private, max-age=${DAILY_MAX_AGE}`; // 위치가 든 URL 의 응답은 공유 캐시(CDN·프록시)에 두지 않는다
 const REGION_CACHE = `public, max-age=${DAILY_MAX_AGE}`;
 // 대피소 경로의 예외는 이 문구로 바꿔 던진다. R2 오류 문구에 키(타일 = 위치)가 섞여 공통 catch 의 로그에 남지 않게
 const SHELTERS_FAILED = "대피소 조회 실패";
@@ -222,7 +220,8 @@ async function shelters(params: URLSearchParams, env: Env): Promise<Response> {
   }
   if (lat !== null && lon !== null) {
     const body = await nearbyShelters(env, Number(lat), Number(lon));
-    return json(JSON.stringify(body), 200, body.total ? NEARBY_CACHE : NO_STORE);
+    // 위치가 든 URL 과 결과는 결과가 있어도 브라우저 캐시에 남기지 않는다(화면 안내 "저장하지 않습니다", #92)
+    return json(JSON.stringify(body), 200, NO_STORE);
   }
   return region ? regionShelters(env, region) : error(422, "lat·lon 또는 region 이 필요함");
 }
